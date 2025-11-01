@@ -9,10 +9,13 @@ The solution employs a comprehensive machine learning pipeline that processes e-
 ## Key Features & Technical Implementation
 
 - **Data Processing & Analysis**
-  - Robust data preprocessing pipeline for handling e-commerce and shipping data
-  - Extensive exploratory data analysis (EDA) using Jupyter notebooks
-  - Advanced feature engineering for temporal and categorical variables
-  - Efficient data handling using modern Python libraries (Pandas/Polars)
+  - Automated data loading from Kaggle with caching support
+  - Comprehensive exploratory data analysis (EDA) notebook with detailed visualizations
+  - Data quality assessment (missing values, duplicates, outliers, encoding issues)
+  - Data cleaning pipeline with missing value imputation and standardization
+  - Feature engineering for temporal, categorical, and geographic variables
+  - Feature selection analysis for classification and forecasting models
+  - Efficient data handling using Pandas with parquet storage for processed data
 
 - **Machine Learning Models**
   - Classification models for delivery delay prediction
@@ -21,26 +24,39 @@ The solution employs a comprehensive machine learning pipeline that processes e-
   - Reproducible training pipelines
 
 - **Technical Stack**
-  - Python 3.x with modern package management (uv)
-  - Data Processing: Pandas/Polars
+  - Python 3.10+ with modern package management (uv)
+  - Data Processing: Pandas, NumPy, Polars
+  - Data Visualization: Plotly, Matplotlib, Seaborn
   - Machine Learning: Scikit-learn
   - Deep Learning: PyTorch
+  - Data Storage: Parquet format for efficient storage
   - Development: Jupyter Notebooks
   - Version Control: Git
 
 ## Project Structure
 
 ```
-├── data/              # Dataset storage
-├── models/            # Trained model artifacts
-├── notebooks/         # Jupyter notebooks for EDA
-├── reports/           # Analysis reports and visualizations
+├── data/                      # Dataset storage
+│   ├── raw/                   # Raw data files
+│   ├── interim/               # Intermediate processed data
+│   ├── processed/             # Final processed datasets
+│   └── external/              # External data sources
+├── models/                    # Trained model artifacts
+├── notebooks/                 # Jupyter notebooks for EDA
+│   └── eda.ipynb             # Comprehensive exploratory data analysis
+├── reports/                   # Analysis reports and visualizations
+│   ├── figures/              # Generated plots and charts
+│   └── logs/                 # Training logs and reports
 ├── src/
-│   ├── data_preprocessing.py    # Data cleaning and preparation
-│   ├── feature_engineering.py   # Feature creation and transformation
-│   ├── train_lstm_model.py     # Deep learning model training
-│   └── train_ml_model.py       # ML model training pipelines
-└── utils/             # Utility functions and helpers
+│   ├── data/
+│   │   ├── data_manager.py   # Data loading and file management utilities
+│   │   └── preprocess.py     # Data preprocessing and cleaning
+│   ├── features/
+│   │   └── build_features.py # Feature engineering and transformation
+│   └── models/
+│       ├── train_lstm.py     # LSTM model training pipeline
+│       └── train_ml.py       # Machine learning model training
+└── utils/                     # Utility functions and helpers
 ```
 
 ## Skills Demonstrated
@@ -78,10 +94,30 @@ This project demonstrates significant real-world business value by addressing cr
    # Install dependencies from pyproject.toml
    uv sync
    ```
-3. Run the notebooks in the `notebooks/` directory for EDA
-4. Execute training pipelines in `src/` for model development
+3. Run the EDA notebook:
+   ```bash
+   jupyter notebook notebooks/eda.ipynb
+   ```
+   The EDA notebook includes:
+   - Data overview and structure analysis
+   - Data quality assessment
+   - Exploratory analysis with visualizations
+   - Data cleaning operations
+   - Feature selection recommendations for ML models
+4. Execute training pipelines in `src/models/` for model development
 
 Note: This project uses uv for dependency management and virtual environments, ensuring reproducible environments and faster package installations.
+
+## Dataset
+
+The project uses the [DataCo Supply Chain Dataset](https://www.kaggle.com/datasets/saicharankomati/dataco-supply-chain-dataset) from Kaggle. The dataset includes:
+- Order details (dates, items, quantities, prices)
+- Customer information (location, segment, demographics)
+- Product information (categories, descriptions, prices)
+- Shipping details (delivery status, dates, modes, regions)
+- Financial metrics (sales, benefits, profit ratios)
+
+The data is automatically downloaded on first use via the `data_manager.py` module.
 
 ## Portfolio Value
 
