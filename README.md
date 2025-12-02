@@ -2,212 +2,142 @@
 
 ## Project Overview
 
-This data science project tackles critical supply chain optimization challenges through advanced machine learning and deep learning techniques. Focused on two key objectives: predicting late deliveries and forecasting product demand, this solution helps e-commerce businesses enhance operational efficiency and customer satisfaction. By leveraging historical order data, shipping details, and customer information, the project develops predictive models that enable proactive management of delivery risks and inventory optimization.
-
-The solution employs a comprehensive machine learning pipeline that processes e-commerce transaction data to identify patterns leading to delivery delays and forecast future product demand. Through careful feature engineering and the application of both traditional ML models and deep learning approaches (LSTM networks), the system provides actionable insights for supply chain managers to optimize delivery reliability and inventory management decisions.
+This data science project tackles critical supply chain optimization challenges through advanced machine learning and deep learning techniques. Focused on two key objectives: predicting late deliveries and forecasting product demand, this solution helps e-commerce businesses enhance operational efficiency and customer satisfaction.
 
 ## Quick Start
-
-### Running the Complete Pipeline
 
 ```bash
 # Install dependencies
 uv sync
 
-# Run the full ML pipeline (data → preprocessing → features → training)
+# Run the full ML pipeline
 python main.py --all
+
+# Or run individual steps
+python main.py --train-classification   # Classification with ensemble models
+python main.py --train-forecasting      # ML forecasting models
+python main.py --train-lstm             # LSTM model (optional)
 ```
 
-### Running Individual Steps
+## Key Features
 
-```bash
-# Step 1: Download/load raw data
-python main.py --data
+- **8 Classification Models** including Voting & Stacking Ensembles
+- **7 Forecasting Models** (XGBoost, Random Forest, Gradient Boosting, etc.)
+- **Overfitting Detection** - Train vs Test comparison for all models
+- **SHAP Explanations** - Interpretable model insights
+- **Comprehensive Notebooks** - 7 detailed step-by-step notebooks
 
-# Step 2: Preprocess data
-python main.py --preprocess
+## CLI Commands
 
-# Step 3: Build features
-python main.py --features
-
-# Step 4: Train ML classification models
-python main.py --train-ml
-
-# Step 5: Train LSTM forecasting model
-python main.py --train-lstm
-
-# Train all models (ML + LSTM)
-python main.py --train-all
-
-# Evaluate trained models
-python main.py --evaluate
-```
-
-## Key Features & Technical Implementation
-
-- **Data Processing & Analysis**
-  - Automated data loading from Kaggle with caching support
-  - Comprehensive exploratory data analysis (EDA) notebooks
-  - Data quality assessment (missing values, duplicates, outliers)
-  - Data cleaning pipeline with missing value imputation and standardization
-  - Feature engineering for temporal, categorical, and geographic variables
-
-- **Machine Learning Models**
-  - Classification models for delivery delay prediction (Logistic Regression, Random Forest, Gradient Boosting)
-  - LSTM-based deep learning models for time series demand forecasting
-  - Model evaluation and performance optimization
-  - Reproducible training pipelines
-
-- **Technical Stack**
-  - Python 3.10+ with modern package management (uv)
-  - Data Processing: Pandas, NumPy
-  - Data Visualization: Plotly, Matplotlib, Seaborn
-  - Machine Learning: Scikit-learn
-  - Deep Learning: PyTorch
-  - Data Storage: Parquet format for efficient storage
-  - Development: Jupyter Notebooks
+| Command | Description |
+|---------|-------------|
+| `python main.py --all` | Run complete pipeline |
+| `python main.py --data` | Download/load raw data |
+| `python main.py --preprocess` | Preprocess data |
+| `python main.py --features` | Build features |
+| `python main.py --train-classification` | Train classification models (with ensembles) |
+| `python main.py --train-forecasting` | Train ML forecasting models |
+| `python main.py --train-lstm` | Train LSTM model |
+| `python main.py --evaluate` | Evaluate trained models |
 
 ## Project Structure
 
 ```
-├── main.py                    # CLI entry point for running pipeline
-├── data/                      # Dataset storage
-│   ├── raw/                   # Raw data files
+├── main.py                    # CLI entry point
+├── data/
+│   ├── raw/                   # Raw data from Kaggle
 │   ├── interim/               # Intermediate processed data
-│   ├── processed/             # Final processed datasets
-│   └── external/              # External data sources
-├── models/                    # Trained model artifacts
-├── notebooks/                 # Jupyter notebooks for each step
-│   ├── 01_data_loading.ipynb          # Data loading & exploration
-│   ├── 02_preprocessing.ipynb          # Data cleaning & preprocessing
-│   ├── 03_feature_engineering.ipynb    # Feature creation
-│   ├── 04_ml_training.ipynb            # ML model training
-│   ├── 05_lstm_training.ipynb          # LSTM forecasting
-│   ├── eda.ipynb                       # Full exploratory analysis
-│   └── model_evaluation.ipynb          # Model evaluation
-├── reports/                   # Analysis reports and visualizations
-│   ├── figures/              # Generated plots and charts
-│   └── logs/                 # Training logs
+│   └── processed/             # Final processed datasets
+├── models/                    # Trained model artifacts (.pkl)
+├── notebooks/                 # Step-by-step analysis notebooks
+│   ├── 01_data_loading.ipynb
+│   ├── 02_exploratory_analysis.ipynb
+│   ├── 03_data_preprocessing.ipynb
+│   ├── 04_feature_engineering.ipynb
+│   ├── 05_classification_modeling.ipynb
+│   ├── 06_demand_forecasting.ipynb
+│   └── 07_model_evaluation.ipynb
 ├── src/
 │   ├── data/
-│   │   ├── data_manager.py   # Data loading and file management
-│   │   └── preprocess.py     # Data preprocessing and cleaning
+│   │   ├── data_manager.py    # Data loading & caching
+│   │   └── preprocess.py      # Data preprocessing
 │   ├── features/
-│   │   └── build_features.py # Feature engineering
+│   │   └── build_features.py  # Feature engineering
 │   └── models/
-│       ├── train_lstm.py     # LSTM model training
-│       └── train_ml.py       # ML classification training
-├── utils/                     # Utility functions
-├── pyproject.toml            # Project dependencies
-└── uv.lock                   # Locked dependencies
+│       ├── classifier.py      # Classification (8 models)
+│       ├── forecaster.py      # ML forecasting (7 models)
+│       └── forecaster_lstm.py # LSTM forecasting
+└── pyproject.toml             # Dependencies
 ```
 
 ## Notebooks Guide
 
-The project includes step-by-step notebooks with detailed interpretation:
+| # | Notebook | Description | Key Topics |
+|---|----------|-------------|------------|
+| 01 | `01_data_loading.ipynb` | Load & explore raw data | Dataset structure, target variables |
+| 02 | `02_exploratory_analysis.ipynb` | Comprehensive EDA | Distributions, correlations, patterns |
+| 03 | `03_data_preprocessing.ipynb` | Data cleaning | Missing values, outliers, encoding |
+| 04 | `04_feature_engineering.ipynb` | Feature creation | Temporal, customer, product features |
+| 05 | `05_classification_modeling.ipynb` | Late delivery prediction | **Ensemble models, overfitting analysis, SHAP** |
+| 06 | `06_demand_forecasting.ipynb` | Demand forecasting | **XGBoost, Random Forest vs LSTM** |
+| 07 | `07_model_evaluation.ipynb` | Business insights | Impact analysis, recommendations |
 
-| Notebook | Description | Key Learning |
-|----------|-------------|--------------|
-| `01_data_loading.ipynb` | Load and explore raw data | Data structure, quality issues |
-| `02_preprocessing.ipynb` | Clean and transform data | Missing values, outliers, encoding |
-| `03_feature_engineering.ipynb` | Create ML features | Temporal, customer, product features |
-| `04_ml_training.ipynb` | Train classification models | Model comparison, feature importance |
-| `05_lstm_training.ipynb` | Train LSTM forecaster | Time series, neural networks |
+## Models
 
-## Skills Demonstrated
+### Classification (Late Delivery Prediction)
+- Logistic Regression (baseline)
+- Decision Tree
+- Random Forest
+- Extra Trees
+- Gradient Boosting
+- AdaBoost
+- **Voting Ensemble**
+- **Stacking Ensemble**
 
-- Data preprocessing and cleaning
-- Feature engineering and selection
-- Time series analysis and forecasting
-- Deep learning model development
-- Machine learning model evaluation
-- Business impact analysis
-- Supply chain optimization
-- Production-ready code development
-- CLI application development
+### Forecasting (Demand Prediction)
+- Ridge/Lasso Regression
+- Random Forest
+- Gradient Boosting
+- **XGBoost**
+- Extra Trees
+- ElasticNet
+- LSTM (optional deep learning)
 
-## Business Impact
+## Technical Stack
 
-This project demonstrates significant real-world business value by addressing critical supply chain challenges:
-- **Reduce delivery delays** through predictive analytics
-- **Optimize inventory levels** with accurate demand forecasting
-- **Enhance customer satisfaction** through reliable delivery predictions
-- **Minimize operational costs** through data-driven decision making
+- **Python 3.10+** with uv package manager
+- **Data**: Pandas, NumPy
+- **ML**: Scikit-learn, XGBoost
+- **Deep Learning**: PyTorch
+- **Visualization**: Matplotlib, Seaborn, Plotly
+- **Explainability**: SHAP
 
 ## Getting Started
 
-1. Clone the repository
-2. Set up the environment using uv:
-   ```bash
-   # Install uv if you haven't already
-   curl -LsSf https://astral.sh/uv/install.sh | sh
+```bash
+# 1. Clone and setup
+git clone <repo>
+cd supply-chain-ml-project
 
-   # Create and activate virtual environment
-   uv venv
-   source .venv/bin/activate
+# 2. Install dependencies
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv && source .venv/bin/activate
+uv sync
 
-   # Install dependencies from pyproject.toml
-   uv sync
-   ```
+# 3. Run pipeline
+python main.py --all
 
-3. Run the pipeline:
-   ```bash
-   # Option A: Run complete pipeline
-   python main.py --all
-
-   # Option B: Run step by step
-   python main.py --data
-   python main.py --preprocess
-   python main.py --features
-   python main.py --train-all
-   ```
-
-4. Or explore the notebooks:
-   ```bash
-   jupyter notebook notebooks/01_data_loading.ipynb
-   ```
+# 4. Or explore notebooks
+jupyter notebook notebooks/01_data_loading.ipynb
+```
 
 ## Dataset
 
-The project uses the [DataCo Supply Chain Dataset](https://www.kaggle.com/datasets/saicharankomati/dataco-supply-chain-dataset) from Kaggle. The dataset includes:
-- Order details (dates, items, quantities, prices)
-- Customer information (location, segment, demographics)
-- Product information (categories, descriptions, prices)
-- Shipping details (delivery status, dates, modes, regions)
-- Financial metrics (sales, benefits, profit ratios)
+[DataCo Supply Chain Dataset](https://www.kaggle.com/datasets/saicharankomati/dataco-supply-chain-dataset) - 180K e-commerce transactions with order, customer, product, and shipping data. Auto-downloaded on first run.
 
-The data is automatically downloaded on first use via the `data_manager.py` module.
+## Business Value
 
-## Pipeline Architecture
-
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  Raw Data   │ ──▶ │ Preprocessing │ ──▶ │ Feature         │
-│  (Kaggle)   │     │  (cleaning)   │     │ Engineering     │
-└─────────────┘     └──────────────┘     └─────────────────┘
-                                                  │
-                    ┌─────────────────────────────┼─────────────────────────────┐
-                    │                             │                             │
-                    ▼                             ▼                             ▼
-           ┌───────────────┐            ┌───────────────┐             ┌───────────────┐
-           │ Logistic Reg  │            │ Random Forest │             │ Gradient Boost│
-           └───────────────┘            └───────────────┘             └───────────────┘
-                    │                             │                             │
-                    └─────────────────────────────┼─────────────────────────────┘
-                                                  ▼
-                                         ┌───────────────┐
-                                         │ Best Model    │
-                                         │ Selection     │
-                                         └───────────────┘
-                                                  │
-                    ┌─────────────────────────────┼─────────────────────────────┐
-                    ▼                                                           ▼
-           ┌───────────────┐                                          ┌───────────────┐
-           │ Classification│                                          │     LSTM      │
-           │ (Late Delivery)│                                          │ (Forecasting) │
-           └───────────────┘                                          └───────────────┘
-```
-
-## Portfolio Value
-
-This project showcases advanced data science capabilities in solving real-world business problems, combining technical expertise in machine learning, deep learning, and data analysis with practical business acumen in supply chain optimization. It demonstrates proficiency in end-to-end ML project development, from data processing to model deployment, making it a valuable addition to any data science portfolio.
+- **Reduce delivery delays** through predictive early warning
+- **Optimize inventory** with accurate demand forecasting
+- **Interpretable insights** via SHAP explanations
+- **Actionable recommendations** for operations teams
