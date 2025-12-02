@@ -15,6 +15,8 @@ End-to-end machine learning system for supply chain optimization with two compon
 - 📊 **Overfitting Detection** - Automatic train vs test comparison
 - 🔍 **SHAP Explanations** - Interpretable model insights
 - 📓 **7 Detailed Notebooks** - Step-by-step analysis
+- 🚀 **Parallel Training** - Fast model training using all CPU cores
+- ⚠️ **Data Leakage Prevention** - Proper feature selection
 
 ## Quick Start
 
@@ -39,10 +41,11 @@ python main.py --train-lstm             # LSTM (optional)
 | `--data` | Download/load raw data |
 | `--preprocess` | Preprocess data |
 | `--features` | Build features |
-| `--train-classification` | Train classifiers (with ensembles) |
+| `--train-classification` | Train classifiers (with parallel execution) |
 | `--train-forecasting` | Train ML forecasters |
 | `--train-lstm` | Train LSTM model |
 | `--evaluate` | Evaluate trained models |
+| `--no-parallel` | Disable parallel training (debug mode) |
 
 ## Project Structure
 
@@ -94,16 +97,18 @@ supply-chain-ml-project/
 
 ### Classification (Late Delivery)
 
-| Model | Type | Expected F1 |
-|-------|------|-------------|
-| Logistic Regression | Baseline | ~0.79 |
-| Decision Tree | Tree | ~0.78 |
-| Random Forest | Ensemble | ~0.85 |
-| Extra Trees | Ensemble | ~0.84 |
-| Gradient Boosting | Boosting | ~0.87 |
-| AdaBoost | Boosting | ~0.83 |
-| **Voting Ensemble** | Meta | ~0.87 |
-| **Stacking Ensemble** | Meta | ~0.88 |
+> **Note**: Results are realistic (~70% accuracy) because we properly exclude leaky features.
+
+| Model | Type | Test F1 | Status |
+|-------|------|---------|--------|
+| Logistic Regression | Baseline | ~0.69 | ✅ Good Fit |
+| Decision Tree | Tree | ~0.70 | ✅ Good Fit |
+| Random Forest | Ensemble | ~0.70 | ✅ Good Fit |
+| Extra Trees | Ensemble | ~0.70 | ✅ Good Fit |
+| Gradient Boosting | Boosting | ~0.70 | ✅ Good Fit |
+| AdaBoost | Boosting | ~0.69 | ✅ Good Fit |
+| Voting Ensemble | Meta | ~0.70 | ✅ Good Fit |
+| **Stacking Ensemble** | Meta | **~0.71** | ✅ Best |
 
 ### Forecasting (Demand)
 
@@ -157,12 +162,25 @@ jupyter notebook notebooks/01_data_loading.ipynb
 - **50+** features (order, customer, product, shipping)
 - Auto-downloaded on first run
 
+## ⚠️ Data Leakage Prevention
+
+This project implements proper feature selection to avoid data leakage. The following columns are **excluded** from features because they contain information that would only be known AFTER delivery:
+
+| Excluded Column | Reason |
+|-----------------|--------|
+| `late_delivery_risk` | This IS the target variable |
+| `delivery_status` | Categorical form of target |
+| `days_for_shipping_(real)` | Only known after delivery |
+| `shipping_date` | Actual shipping date (post-hoc) |
+
+This is why our models achieve ~70% accuracy instead of 100%. The 100% accuracy seen in some Kaggle kernels is due to data leakage!
+
 ## Business Value
 
-- 📉 **15-20% reduction** in late deliveries
-- 📦 **12-18% inventory optimization**
-- 💰 **$250K+ estimated annual savings**
-- 🎯 **86% delay detection rate**
+- 📉 **10-15% reduction** in late deliveries through proactive intervention
+- 📦 **Prioritized shipping** for high-risk orders
+- 💰 **Cost savings** from reduced customer complaints and refunds
+- 🎯 **70% delay detection rate** (realistic, leakage-free model)
 
 ## Documentation
 
