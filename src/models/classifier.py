@@ -1,6 +1,12 @@
 """
 Classification Models for Late Delivery Prediction
-Trains ensemble and base models with overfitting detection.
+Trains ensemble and base models with overfitting detection and parallel computing.
+
+Features:
+- Parallel training using joblib
+- Overfitting/underfitting detection
+- Multiple ensemble methods
+- SHAP explainability support
 
 Usage:
     from src.models.classifier import SupplyChainClassifier
@@ -23,9 +29,10 @@ from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score,
     f1_score, accuracy_score, precision_score, recall_score
 )
+from joblib import Parallel, delayed
 import joblib
 from datetime import datetime
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, List
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -33,6 +40,8 @@ warnings.filterwarnings('ignore')
 class SupplyChainClassifier:
     """
     Train and evaluate classification models for late delivery prediction.
+
+    Supports parallel training for faster model development.
 
     Models:
     - Logistic Regression (baseline)
@@ -45,8 +54,16 @@ class SupplyChainClassifier:
     - Stacking Ensemble
     """
 
-    def __init__(self, random_state: int = 42):
+    def __init__(self, random_state: int = 42, n_jobs: int = -1):
+        """
+        Initialize classifier.
+
+        Args:
+            random_state: Random seed for reproducibility
+            n_jobs: Number of parallel jobs (-1 for all cores)
+        """
         self.random_state = random_state
+        self.n_jobs = n_jobs
         self.models: Dict[str, Any] = {}
         self.results: Dict[str, Dict] = {}
         self.best_model = None
@@ -60,7 +77,7 @@ class SupplyChainClassifier:
         self.models = {
             'Logistic Regression': LogisticRegression(
                 max_iter=1000, random_state=self.random_state,
-                class_weight='balanced', solver='lbfgs'
+                class_weight='balanced', solver='lbfgs', n_jobs=self.n_jobs
             ),
             'Decision Tree': DecisionTreeClassifier(
                 max_depth=10, min_samples_split=10, min_samples_leaf=5,
@@ -69,12 +86,12 @@ class SupplyChainClassifier:
             'Random Forest': RandomForestClassifier(
                 n_estimators=200, max_depth=15, min_samples_split=10,
                 min_samples_leaf=4, max_features='sqrt',
-                random_state=self.random_state, class_weight='balanced', n_jobs=-1
+                random_state=self.random_state, class_weight='balanced', n_jobs=self.n_jobs
             ),
             'Extra Trees': ExtraTreesClassifier(
                 n_estimators=200, max_depth=15, min_samples_split=10,
                 min_samples_leaf=4, random_state=self.random_state,
-                class_weight='balanced', n_jobs=-1
+                class_weight='balanced', n_jobs=self.n_jobs
             ),
             'Gradient Boosting': GradientBoostingClassifier(
                 n_estimators=150, learning_rate=0.1, max_depth=5,
@@ -82,7 +99,8 @@ class SupplyChainClassifier:
                 random_state=self.random_state
             ),
             'AdaBoost': AdaBoostClassifier(
-                n_estimators=100, learning_rate=0.1, random_state=self.random_state
+                n_estimators=100, learning_rate=0.1, random_state=self.random_state,
+                algorithm='SAMME'  # Updated for sklearn compatibility
             )
         }
 
@@ -90,28 +108,29 @@ class SupplyChainClassifier:
             self.models['Voting Ensemble'] = VotingClassifier(
                 estimators=[
                     ('rf', RandomForestClassifier(n_estimators=100, max_depth=10,
-                                                  random_state=self.random_state, n_jobs=-1)),
+                                                  random_state=self.random_state, n_jobs=self.n_jobs)),
                     ('gb', GradientBoostingClassifier(n_estimators=100, max_depth=5,
                                                       random_state=self.random_state)),
                     ('et', ExtraTreesClassifier(n_estimators=100, max_depth=10,
-                                                random_state=self.random_state, n_jobs=-1))
+                                                random_state=self.random_state, n_jobs=self.n_jobs))
                 ],
-                voting='soft'
+                voting='soft', n_jobs=self.n_jobs
             )
             self.models['Stacking Ensemble'] = StackingClassifier(
                 estimators=[
                     ('rf', RandomForestClassifier(n_estimators=100, max_depth=10,
-                                                  random_state=self.random_state, n_jobs=-1)),
+                                                  random_state=self.random_state, n_jobs=self.n_jobs)),
                     ('gb', GradientBoostingClassifier(n_estimators=100, max_depth=5,
                                                       random_state=self.random_state)),
                     ('et', ExtraTreesClassifier(n_estimators=100, max_depth=10,
-                                                random_state=self.random_state, n_jobs=-1))
+                                                random_state=self.random_state, n_jobs=self.n_jobs))
                 ],
                 final_estimator=LogisticRegression(max_iter=1000),
-                cv=3
+                cv=3, n_jobs=self.n_jobs
             )
 
         print(f"✅ Initialized {len(self.models)} classification models")
+        print(f"   Parallel jobs: {self.n_jobs} (-1 = all cores)")
         for name in self.models.keys():
             print(f"   • {name}")
 
@@ -125,17 +144,16 @@ class SupplyChainClassifier:
         print(f"   Test:  {X_test.shape[0]:,} ({test_size*100:.0f}%)")
         return X_train, X_test, y_train, y_test
 
-    def train_model(self, model_name: str, X_train: pd.DataFrame, y_train: pd.Series):
-        """Train a single model."""
-        print(f"\n{'=' * 60}\nTraining {model_name}...\n{'=' * 60}")
-        model = self.models[model_name]
+    def _train_single_model(self, model_name: str, model: Any,
+                            X_train: pd.DataFrame, y_train: pd.Series) -> Tuple[str, Any]:
+        """Train a single model (used for parallel execution)."""
         model.fit(X_train, y_train)
-        print(f"✅ {model_name} training complete")
-        return model
+        return model_name, model
 
-    def evaluate_model(self, model_name: str, model: Any, X_train: pd.DataFrame,
-                       y_train: pd.Series, X_test: pd.DataFrame, y_test: pd.Series) -> Dict:
-        """Evaluate model with overfitting detection."""
+    def _evaluate_single_model(self, model_name: str, model: Any,
+                               X_train: pd.DataFrame, y_train: pd.Series,
+                               X_test: pd.DataFrame, y_test: pd.Series) -> Dict:
+        """Evaluate a single model (used for parallel execution)."""
         # Predictions
         y_train_pred = model.predict(X_train)
         y_test_pred = model.predict(X_test)
@@ -150,15 +168,16 @@ class SupplyChainClassifier:
         train_roc = roc_auc_score(y_train, y_train_proba) if y_train_proba is not None else None
         test_roc = roc_auc_score(y_test, y_test_proba) if y_test_proba is not None else None
 
-        # CV score
-        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=self.random_state)
-        cv_scores = cross_val_score(model, X_train, y_train, cv=cv, scoring='f1_weighted')
-
         # Overfitting check
         acc_gap = train_acc - test_acc
-        fit_status = "⚠️ OVERFITTING" if acc_gap > 0.05 else ("⚠️ UNDERFITTING" if acc_gap < -0.02 else "✅ GOOD FIT")
+        if acc_gap > 0.05:
+            fit_status = "⚠️ OVERFITTING"
+        elif test_acc < 0.6:
+            fit_status = "⚠️ UNDERFITTING"
+        else:
+            fit_status = "✅ GOOD FIT"
 
-        results = {
+        return {
             'model_name': model_name,
             'train_accuracy': train_acc, 'test_accuracy': test_acc,
             'train_f1': train_f1, 'test_f1': test_f1,
@@ -169,35 +188,99 @@ class SupplyChainClassifier:
             'train_roc_auc': train_roc, 'test_roc_auc': test_roc,
             'accuracy_gap': acc_gap, 'f1_gap': train_f1 - test_f1,
             'fit_status': fit_status,
-            'confusion_matrix': confusion_matrix(y_test, y_test_pred),
-            'cv_score': cv_scores.mean(), 'cv_std': cv_scores.std()
-        }
-        self.results[model_name] = results
-        self.overfitting_analysis[model_name] = {
-            'train_accuracy': train_acc, 'test_accuracy': test_acc,
-            'gap': acc_gap, 'status': fit_status
+            'confusion_matrix': confusion_matrix(y_test, y_test_pred)
         }
 
-        # Print
-        print(f"\n{model_name} Performance:")
-        print(f"  {'Metric':<15} {'Train':>10} {'Test':>10} {'Gap':>10}")
-        print(f"  {'-'*45}")
-        print(f"  {'Accuracy':<15} {train_acc:>10.4f} {test_acc:>10.4f} {acc_gap:>10.4f}")
-        print(f"  {'F1 Score':<15} {train_f1:>10.4f} {test_f1:>10.4f}")
-        print(f"  CV F1: {cv_scores.mean():.4f} (±{cv_scores.std():.4f})")
-        print(f"  Status: {fit_status}")
-        return results
+    def train_all_models_parallel(self, X_train: pd.DataFrame, y_train: pd.Series,
+                                  X_test: pd.DataFrame, y_test: pd.Series):
+        """Train and evaluate all models in parallel."""
+        print("\n" + "=" * 60)
+        print("PARALLEL TRAINING - ALL MODELS")
+        print("=" * 60)
+
+        # Parallel training
+        print(f"\n🚀 Training {len(self.models)} models in parallel...")
+        trained = Parallel(n_jobs=self.n_jobs, verbose=10)(
+            delayed(self._train_single_model)(name, model, X_train, y_train)
+            for name, model in self.models.items()
+        )
+
+        # Update models dict with trained models
+        for name, model in trained:
+            self.models[name] = model
+
+        print(f"\n✅ All models trained!")
+
+        # Parallel evaluation
+        print(f"\n📊 Evaluating all models in parallel...")
+        evaluations = Parallel(n_jobs=self.n_jobs, verbose=5)(
+            delayed(self._evaluate_single_model)(name, model, X_train, y_train, X_test, y_test)
+            for name, model in self.models.items()
+        )
+
+        # Store results
+        for result in evaluations:
+            name = result['model_name']
+            self.results[name] = result
+            self.overfitting_analysis[name] = {
+                'train_accuracy': result['train_accuracy'],
+                'test_accuracy': result['test_accuracy'],
+                'gap': result['accuracy_gap'],
+                'status': result['fit_status']
+            }
+
+        # Print results
+        self._print_results_summary()
+        self.select_best_model()
+        self.print_overfitting_summary()
 
     def train_all_models(self, X_train: pd.DataFrame, y_train: pd.Series,
                          X_test: pd.DataFrame, y_test: pd.Series):
-        """Train and evaluate all models."""
+        """Train and evaluate all models (sequential version for debugging)."""
         print("\n" + "=" * 60 + "\nTRAINING ALL MODELS\n" + "=" * 60)
-        for model_name in self.models.keys():
-            trained_model = self.train_model(model_name, X_train, y_train)
-            self.evaluate_model(model_name, trained_model, X_train, y_train, X_test, y_test)
-            self.models[model_name] = trained_model
+
+        for model_name, model in self.models.items():
+            print(f"\n{'=' * 60}\nTraining {model_name}...\n{'=' * 60}")
+            model.fit(X_train, y_train)
+            print(f"✅ {model_name} training complete")
+
+            # Evaluate
+            result = self._evaluate_single_model(
+                model_name, model, X_train, y_train, X_test, y_test
+            )
+            self.results[model_name] = result
+            self.overfitting_analysis[model_name] = {
+                'train_accuracy': result['train_accuracy'],
+                'test_accuracy': result['test_accuracy'],
+                'gap': result['accuracy_gap'],
+                'status': result['fit_status']
+            }
+
+            # Print individual result
+            self._print_model_result(result)
+
+            self.models[model_name] = model
+
         self.select_best_model()
         self.print_overfitting_summary()
+
+    def _print_model_result(self, result: Dict):
+        """Print single model result."""
+        print(f"\n{result['model_name']} Performance:")
+        print(f"  {'Metric':<15} {'Train':>10} {'Test':>10} {'Gap':>10}")
+        print(f"  {'-'*45}")
+        print(f"  {'Accuracy':<15} {result['train_accuracy']:>10.4f} {result['test_accuracy']:>10.4f} {result['accuracy_gap']:>10.4f}")
+        print(f"  {'F1 Score':<15} {result['train_f1']:>10.4f} {result['test_f1']:>10.4f}")
+        print(f"  Status: {result['fit_status']}")
+
+    def _print_results_summary(self):
+        """Print summary of all model results."""
+        print("\n" + "=" * 60)
+        print("MODEL RESULTS SUMMARY")
+        print("=" * 60)
+
+        for name, result in self.results.items():
+            self._print_model_result(result)
 
     def select_best_model(self):
         """Select best model based on test F1."""
@@ -236,8 +319,7 @@ class SupplyChainClassifier:
         data = [{
             'Model': n, 'Train Accuracy': r['train_accuracy'], 'Test Accuracy': r['test_accuracy'],
             'Train F1': r['train_f1'], 'Test F1': r['test_f1'], 'Test ROC-AUC': r['test_roc_auc'],
-            'CV F1': r['cv_score'], 'CV Std': r['cv_std'], 'Accuracy Gap': r['accuracy_gap'],
-            'Fit Status': r['fit_status']
+            'Accuracy Gap': r['accuracy_gap'], 'Fit Status': r['fit_status']
         } for n, r in self.results.items()]
         return pd.DataFrame(data).sort_values('Test F1', ascending=False)
 
@@ -264,8 +346,13 @@ class SupplyChainClassifier:
         return text
 
 
-def run_training_pipeline():
-    """Complete classification training pipeline."""
+def run_training_pipeline(parallel: bool = True):
+    """
+    Complete classification training pipeline.
+
+    Args:
+        parallel: If True, use parallel training. If False, train sequentially.
+    """
     print("\n" + "=" * 80 + "\nCLASSIFICATION TRAINING PIPELINE\n" + "=" * 80)
     from src.data.preprocess import load_and_preprocess
     from src.features.build_features import build_features_pipeline
@@ -273,10 +360,15 @@ def run_training_pipeline():
     df = load_and_preprocess()
     X, y = build_features_pipeline(df)
 
-    classifier = SupplyChainClassifier(random_state=42)
+    classifier = SupplyChainClassifier(random_state=42, n_jobs=-1)
     classifier.initialize_models(include_ensemble=True)
     X_train, X_test, y_train, y_test = classifier.split_data(X, y)
-    classifier.train_all_models(X_train, y_train, X_test, y_test)
+
+    if parallel:
+        classifier.train_all_models_parallel(X_train, y_train, X_test, y_test)
+    else:
+        classifier.train_all_models(X_train, y_train, X_test, y_test)
+
     classifier.save_models()
     classifier.generate_report()
 
@@ -285,5 +377,4 @@ def run_training_pipeline():
 
 
 if __name__ == "__main__":
-    classifier = run_training_pipeline()
-
+    classifier = run_training_pipeline(parallel=True)

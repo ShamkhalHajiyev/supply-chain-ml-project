@@ -67,8 +67,8 @@ def run_feature_engineering(df=None):
     return X, y, df
 
 
-def run_classification_training(X=None, y=None):
-    """Step 4: Train classification models with ensemble."""
+def run_classification_training(X=None, y=None, parallel: bool = True):
+    """Step 4: Train classification models with ensemble and parallel computing."""
     print_header("STEP 4: CLASSIFICATION MODEL TRAINING")
 
     from src.models.classifier import SupplyChainClassifier
@@ -79,11 +79,19 @@ def run_classification_training(X=None, y=None):
         df = load_and_preprocess()
         X, y = build_features_pipeline(df)
 
-    classifier = SupplyChainClassifier(random_state=42)
+    # Use all CPU cores for parallel training
+    classifier = SupplyChainClassifier(random_state=42, n_jobs=-1)
     classifier.initialize_models(include_ensemble=True)
 
     X_train, X_test, y_train, y_test = classifier.split_data(X, y, test_size=0.2)
-    classifier.train_all_models(X_train, y_train, X_test, y_test)
+
+    # Use parallel training for faster execution
+    if parallel:
+        print("\n🚀 Using PARALLEL training (all CPU cores)...")
+        classifier.train_all_models_parallel(X_train, y_train, X_test, y_test)
+    else:
+        classifier.train_all_models(X_train, y_train, X_test, y_test)
+
     classifier.get_feature_importance(X.columns.tolist(), top_n=15)
     classifier.save_models()
     classifier.generate_report()
@@ -186,8 +194,8 @@ def run_full_pipeline():
     df_clean = run_preprocessing(df)
     X, y, _ = run_feature_engineering(df_clean)
 
-    # Step 4-5: Training
-    classifier = run_classification_training(X, y)
+    # Step 4-5: Training (with parallel execution)
+    classifier = run_classification_training(X, y, parallel=True)
     forecaster = run_forecasting_training(df_clean)
 
     # Summary
@@ -222,6 +230,7 @@ Examples:
     parser.add_argument('--train-forecasting', action='store_true', help='Train ML forecasting models')
     parser.add_argument('--train-lstm', action='store_true', help='Train LSTM model')
     parser.add_argument('--evaluate', action='store_true', help='Evaluate models')
+    parser.add_argument('--no-parallel', action='store_true', help='Disable parallel training (use sequential)')
 
     args = parser.parse_args()
 
@@ -240,7 +249,7 @@ Examples:
             if args.features:
                 run_feature_engineering()
             if args.train_classification:
-                run_classification_training()
+                run_classification_training(parallel=not args.no_parallel)
             if args.train_forecasting:
                 run_forecasting_training()
             if args.train_lstm:

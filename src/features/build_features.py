@@ -1,6 +1,15 @@
 """
 Feature Engineering Module
 Transforms preprocessed data into ML-ready features for classification and forecasting.
+
+IMPORTANT: This module carefully avoids data leakage by only using features
+available at ORDER TIME (before delivery outcome is known).
+
+LEAKY COLUMNS TO AVOID:
+- late_delivery_risk (this IS the target)
+- delivery_status (this IS the target) 
+- days_for_shipping_(real) (only known after delivery)
+- delivery_days (calculated from actual shipping date)
 """
 
 import pandas as pd
@@ -11,13 +20,27 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
+# Columns that MUST be excluded to prevent data leakage
+LEAKY_COLUMNS = {
+    'late_delivery_risk',           # Target variable
+    'delivery_status',              # Target variable (categorical form)
+    'delivery_status_encoded',      # Encoded target
+    'days_for_shipping_(real)',     # Only known after delivery
+    'delivery_days',                # Calculated from actual shipping date
+    'shipping_date_(dateorders)',   # Actual shipping date (post-hoc)
+}
+
+
 class FeatureEngineer:
     """
     Feature engineering for supply chain ML models.
 
     Creates features for:
-    1. Late delivery classification
+    1. Late delivery classification (using only pre-delivery features)
     2. Demand forecasting (time series)
+    
+    NOTE: All features are derived from information available AT ORDER TIME
+    to prevent data leakage.
     """
 
     def __init__(self):
@@ -28,7 +51,9 @@ class FeatureEngineer:
 
     def create_temporal_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Extract temporal features from order dates.
+        Extract temporal features from ORDER dates only.
+        
+        NOTE: We use order_date, NOT shipping_date (which would be leakage).
 
         Features:
         - Day of week
@@ -59,13 +84,13 @@ class FeatureEngineer:
             # Days since start (for trend analysis)
             df['days_since_start'] = (df[date_col] - df[date_col].min()).dt.days
 
-            print(" Temporal features created: day_of_week, month, quarter, is_weekend, days_since_start")
+            print("✅ Temporal features created: day_of_week, month, quarter, is_weekend, days_since_start")
 
         return df
 
     def create_customer_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Create customer-related features.
+        Create customer-related features (available at order time).
 
         Features:
         - Customer order frequency
@@ -82,13 +107,13 @@ class FeatureEngineer:
                 customer_sales = df.groupby('customer_id')['sales'].sum()
                 df['customer_lifetime_value'] = df['customer_id'].map(customer_sales)
 
-            print(" Customer features created: order_count, lifetime_value")
+            print("✅ Customer features created: order_count, lifetime_value")
 
         return df
 
     def create_product_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Create product-related features.
+        Create product-related features (available at order time).
 
         Features:
         - Product popularity (order frequency)
@@ -114,18 +139,21 @@ class FeatureEngineer:
             df['discount_rate'] = df['order_item_discount'] / (df['product_price'] + 1e-6)
             df['discount_rate'] = df['discount_rate'].clip(0, 1)
 
-        print(" Product features created: popularity, category_popularity, order_value, discount_rate")
+        print("✅ Product features created: popularity, category_popularity, order_value, discount_rate")
 
         return df
 
     def create_shipping_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Create shipping and logistics features.
+        Create shipping and logistics features (ONLY pre-delivery info).
 
         Features:
         - Shipping mode encoding
+        - Scheduled shipping days (NOT actual)
         - Geographic distance proxy
         - Order priority
+        
+        NOTE: days_for_shipment_(scheduled) IS safe - it's the promised delivery time
         """
         # Shipping urgency (based on shipping mode)
         if 'shipping_mode' in df.columns:
@@ -137,12 +165,16 @@ class FeatureEngineer:
             }
             df['shipping_urgency'] = df['shipping_mode'].map(urgency_map).fillna(1)
 
+        # Scheduled days for shipping (this is SAFE - it's the promised time)
+        if 'days_for_shipment_(scheduled)' in df.columns:
+            df['scheduled_shipping_days'] = df['days_for_shipment_(scheduled)']
+        
         # Order priority encoding
         if 'order_region' in df.columns and 'order_country' in df.columns:
             # Create region-country combination as proxy for distance
             df['region_country'] = df['order_region'].astype(str) + '_' + df['order_country'].astype(str)
 
-        print(" Shipping features created: shipping_urgency, region_country")
+        print("✅ Shipping features created: shipping_urgency, scheduled_shipping_days, region_country")
 
         return df
 
@@ -168,7 +200,7 @@ class FeatureEngineer:
         if 'sales' in df.columns:
             df['is_high_value'] = (df['sales'] > df['sales'].quantile(0.75)).astype(int)
 
-        print(" Financial features created: profit_margin_pct, sales_per_item, is_high_value")
+        print("✅ Financial features created: profit_margin_pct, sales_per_item, is_high_value")
 
         return df
 
@@ -198,15 +230,20 @@ class FeatureEngineer:
     def encode_categorical_features(self, df: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
         """
         Encode categorical variables using label encoding.
+        
+        IMPORTANT: Excludes 'delivery_status' to prevent data leakage!
 
         Args:
             df: DataFrame
             fit: If True, fit encoders. If False, use existing encoders.
         """
+        # SAFE categorical columns (available at order time, NOT target-related)
         categorical_cols = [
-            'type', 'delivery_status', 'category_name', 'customer_segment',
+            'type', 'category_name', 'customer_segment',
             'department_name', 'market', 'order_region', 'order_country',
-            'order_state', 'order_city', 'product_name', 'shipping_mode'
+            'order_state', 'order_city', 'shipping_mode'
+            # NOTE: 'delivery_status' EXCLUDED - it's the target!
+            # NOTE: 'product_name' EXCLUDED - too many categories, use popularity instead
         ]
 
         self.categorical_columns = [col for col in categorical_cols if col in df.columns]
@@ -226,13 +263,17 @@ class FeatureEngineer:
                     )
 
         if fit:
-            print(f" Encoded {len(self.categorical_columns)} categorical features")
+            print(f"✅ Encoded {len(self.categorical_columns)} categorical features")
+            print(f"   (Excluded 'delivery_status' to prevent leakage)")
 
         return df
 
     def select_features_for_classification(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Select features for late delivery classification.
+        
+        IMPORTANT: Only uses features available at ORDER TIME.
+        Excludes all post-delivery information to prevent leakage.
 
         Returns:
             X: Feature matrix
@@ -241,7 +282,7 @@ class FeatureEngineer:
         # Core features for classification
         feature_cols = []
 
-        # Temporal features
+        # Temporal features (from ORDER date only)
         temporal = ['order_day_of_week', 'order_month', 'order_quarter', 'is_weekend']
         feature_cols.extend([c for c in temporal if c in df.columns])
 
@@ -253,25 +294,36 @@ class FeatureEngineer:
         product = ['product_popularity', 'category_popularity', 'order_value', 'discount_rate']
         feature_cols.extend([c for c in product if c in df.columns])
 
-        # Shipping features
-        shipping = ['shipping_urgency', 'delivery_days']
+        # Shipping features (ONLY pre-delivery info!)
+        # NOTE: 'delivery_days' EXCLUDED - it's calculated from actual delivery date!
+        shipping = ['shipping_urgency', 'scheduled_shipping_days']
         feature_cols.extend([c for c in shipping if c in df.columns])
 
         # Financial features
         financial = ['profit_margin_pct', 'sales_per_item', 'is_high_value', 'order_item_quantity']
         feature_cols.extend([c for c in financial if c in df.columns])
 
-        # Encoded categorical features
+        # Encoded categorical features (excluding delivery_status!)
         encoded = [f'{c}_encoded' for c in self.categorical_columns if f'{c}_encoded' in df.columns]
         feature_cols.extend(encoded)
 
-        # Remove duplicates
+        # Remove duplicates and VERIFY no leaky columns
         feature_cols = list(set(feature_cols))
+        feature_cols = [c for c in feature_cols if c.lower() not in LEAKY_COLUMNS 
+                        and not c.lower().startswith('delivery')]
 
-        print(f"\n Selected {len(feature_cols)} features for classification")
+        print(f"\n✅ Selected {len(feature_cols)} features for classification")
+        print(f"   (Verified: No leaky features included)")
 
         X = df[feature_cols].copy()
-        y = df['late_delivery'] if 'late_delivery' in df.columns else None
+        
+        # Use late_delivery_risk directly if available, otherwise create from delivery_status
+        if 'late_delivery_risk' in df.columns:
+            y = df['late_delivery_risk'].astype(int)
+        elif 'late_delivery' in df.columns:
+            y = df['late_delivery']
+        else:
+            y = None
 
         return X, y
 
@@ -296,7 +348,7 @@ class FeatureEngineer:
         if 'order_item_quantity' in df.columns:
             ts_features.append('order_item_quantity')
 
-        print(f"\n Selected {len(ts_features)} features for forecasting")
+        print(f"\n✅ Selected {len(ts_features)} features for forecasting")
 
         return df[ts_features].copy()
 
@@ -311,6 +363,9 @@ class FeatureEngineer:
         print("=" * 60)
         print("FEATURE ENGINEERING PIPELINE")
         print("=" * 60)
+        print("⚠️  LEAKAGE PREVENTION ACTIVE")
+        print(f"    Excluded columns: {', '.join(LEAKY_COLUMNS)}")
+        print("=" * 60)
 
         # Create features
         df = self.create_temporal_features(df)
@@ -319,7 +374,7 @@ class FeatureEngineer:
         df = self.create_shipping_features(df)
         df = self.create_financial_features(df)
 
-        # Encode categoricals
+        # Encode categoricals (excluding delivery_status)
         df = self.encode_categorical_features(df, fit=True)
 
         # Select features for classification
@@ -373,6 +428,7 @@ if __name__ == "__main__":
     # Build features
     X, y = build_features_pipeline(df)
 
-    print("\n Feature engineering complete!")
+    print("\n✅ Feature engineering complete!")
     print(f"Features: {X.shape[1]}")
     print(f"Samples: {X.shape[0]}")
+    print(f"\nFeature columns: {list(X.columns)}")

@@ -1,6 +1,9 @@
 """
 Data Preprocessing Module
 Handles data cleaning, validation, and transformation for supply chain ML pipeline.
+
+IMPORTANT: This module preserves 'late_delivery_risk' as the target variable
+but DOES NOT use post-delivery information for feature creation.
 """
 
 import pandas as pd
@@ -9,6 +12,14 @@ from typing import Tuple, Dict, Any
 from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
+
+
+# Columns that should NOT be used as features (they leak the target)
+LEAKY_COLUMNS = [
+    'late_delivery_risk',           # This IS the target
+    'delivery_status',              # This IS the target (categorical)
+    'days_for_shipping_(real)',     # Only known after delivery
+]
 
 
 class DataPreprocessor:
@@ -21,6 +32,7 @@ class DataPreprocessor:
     - Parse datetime features
     - Remove duplicates and outliers
     - Standardize column names
+    - Preserve target variable (late_delivery_risk)
     """
 
     def __init__(self):
@@ -88,7 +100,7 @@ class DataPreprocessor:
         final_count = len(df)
 
         if initial_count > final_count:
-            print(f" Removed {initial_count - final_count} duplicate rows")
+            print(f"✅ Removed {initial_count - final_count} duplicate rows")
 
         return df
 
@@ -118,35 +130,51 @@ class DataPreprocessor:
 
         return df
 
-    def encode_target_variable(self, df: pd.DataFrame, target_col: str = 'delivery_status') -> pd.DataFrame:
+    def preserve_target_variable(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Encode delivery status as binary target.
-        Late delivery = 1, On-time = 0
+        Preserve the late_delivery_risk column as our target.
+        
+        The raw data already has this column as binary (0/1):
+        - 1: Late delivery expected/occurred
+        - 0: On-time delivery expected/occurred
+        
+        NOTE: We keep this separate from features to prevent leakage.
         """
-        if target_col in df.columns:
-            # Create binary target: 1 for late delivery
-            df['late_delivery'] = df[target_col].apply(
+        if 'late_delivery_risk' in df.columns:
+            # Ensure it's properly typed
+            df['late_delivery'] = df['late_delivery_risk'].astype(int)
+            print(f"✅ Target variable 'late_delivery' preserved from 'late_delivery_risk'")
+            print(f"   Distribution: {df['late_delivery'].value_counts().to_dict()}")
+        elif 'delivery_status' in df.columns:
+            # Fallback: create from delivery_status if late_delivery_risk missing
+            df['late_delivery'] = df['delivery_status'].apply(
                 lambda x: 1 if 'late' in str(x).lower() else 0
             )
-            print(f" Created binary target 'late_delivery'")
-            print(f"  Distribution: {df['late_delivery'].value_counts().to_dict()}")
-
+            print(f"✅ Created binary target 'late_delivery' from 'delivery_status'")
+            print(f"   Distribution: {df['late_delivery'].value_counts().to_dict()}")
+        
         return df
 
     def create_derived_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Create basic derived features for preprocessing."""
-
-        # Delivery time (if dates available)
-        if 'order_date_(dateorders)' in df.columns and 'shipping_date_(dateorders)' in df.columns:
-            df['delivery_days'] = (
-                df['shipping_date_(dateorders)'] - df['order_date_(dateorders)']
-            ).dt.days
-            df['delivery_days'] = df['delivery_days'].clip(lower=0)
-
-        # Profit margin
-        if 'order_profit_per_order' in df.columns and 'sales_per_customer' in df.columns:
-            df['profit_margin'] = df['order_profit_per_order'] / (df['sales_per_customer'] + 1e-6)
+        """
+        Create basic derived features for preprocessing.
+        
+        IMPORTANT: Only creates features from information available AT ORDER TIME.
+        Does NOT use actual shipping date or delivery outcome.
+        """
+        # Scheduled delivery time (SAFE - this is the promised time, known at order)
+        if 'days_for_shipment_(scheduled)' in df.columns:
+            df['scheduled_days'] = df['days_for_shipment_(scheduled)']
+            
+        # Profit margin (known at order time from pricing)
+        if 'order_profit_per_order' in df.columns and 'sales' in df.columns:
+            df['profit_margin'] = df['order_profit_per_order'] / (df['sales'] + 1e-6)
             df['profit_margin'] = df['profit_margin'].clip(-1, 1)
+
+        # NOTE: We do NOT create 'delivery_days' from shipping_date - order_date
+        # because that would be using post-hoc information!
+        
+        print("✅ Derived features created (leakage-free)")
 
         return df
 
@@ -160,8 +188,8 @@ class DataPreprocessor:
         3. Handle missing values
         4. Remove duplicates
         5. Handle outliers
-        6. Encode target
-        7. Create derived features
+        6. Preserve target variable
+        7. Create derived features (leakage-free)
         """
         print("=" * 60)
         print("PREPROCESSING PIPELINE")
@@ -171,15 +199,15 @@ class DataPreprocessor:
 
         # Step 1: Clean column names
         df = self.clean_column_names(df)
-        print(" Column names standardized")
+        print("✅ Column names standardized")
 
         # Step 2: Parse dates
         df = self.parse_dates(df)
-        print(" Date columns parsed")
+        print("✅ Date columns parsed")
 
         # Step 3: Handle missing values
         df = self.handle_missing_values(df)
-        print(" Missing values handled")
+        print("✅ Missing values handled")
 
         # Step 4: Remove duplicates
         df = self.remove_duplicates(df)
@@ -187,16 +215,20 @@ class DataPreprocessor:
         # Step 5: Handle outliers in key numeric columns
         numeric_cols = ['order_item_quantity', 'sales', 'order_profit_per_order']
         df = self.handle_outliers(df, cols=numeric_cols)
-        print(" Outliers handled")
+        print("✅ Outliers handled")
 
-        # Step 6: Encode target variable
-        df = self.encode_target_variable(df)
+        # Step 6: Preserve target variable
+        df = self.preserve_target_variable(df)
 
-        # Step 7: Create derived features
+        # Step 7: Create derived features (leakage-free)
         df = self.create_derived_features(df)
-        print(" Derived features created")
 
         print(f"\nFinal shape: {df.shape}")
+        print("=" * 60)
+        print("\n⚠️  LEAKAGE WARNING: The following columns should NOT be used as features:")
+        for col in LEAKY_COLUMNS:
+            if col in df.columns:
+                print(f"    - {col}")
         print("=" * 60)
 
         return df
@@ -206,7 +238,7 @@ class DataPreprocessor:
         df = self.clean_column_names(df)
         df = self.parse_dates(df)
         df = self.handle_missing_values(df)
-        df = self.encode_target_variable(df)
+        df = self.preserve_target_variable(df)
         df = self.create_derived_features(df)
         return df
 
@@ -242,6 +274,6 @@ def load_and_preprocess(raw_path: str = None) -> pd.DataFrame:
 if __name__ == "__main__":
     # Run preprocessing pipeline
     df_cleaned = load_and_preprocess()
-    print("\n Preprocessing complete!")
+    print("\n✅ Preprocessing complete!")
     print(f"Cleaned data shape: {df_cleaned.shape}")
     print(f"\nColumns: {list(df_cleaned.columns[:10])}...")
