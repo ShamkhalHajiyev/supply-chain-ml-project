@@ -72,7 +72,7 @@ class SupplyChainClassifier:
             )
         }
 
-        print(" Initialized 3 classification models")
+        print("✅ Initialized 3 classification models")
 
     def split_data(self, X: pd.DataFrame, y: pd.Series, test_size: float = 0.2) -> Tuple:
         """
@@ -93,11 +93,11 @@ class SupplyChainClassifier:
             stratify=y
         )
 
-        print(f"\n Data split:")
-        print(f"  Train: {X_train.shape[0]} samples")
-        print(f"  Test:  {X_test.shape[0]} samples")
-        print(f"  Train class distribution: {y_train.value_counts().to_dict()}")
-        print(f"  Test class distribution:  {y_test.value_counts().to_dict()}")
+        print(f"\n📊 Data split:")
+        print(f"   Train: {X_train.shape[0]} samples")
+        print(f"   Test:  {X_test.shape[0]} samples")
+        print(f"   Train class distribution: {y_train.value_counts().to_dict()}")
+        print(f"   Test class distribution:  {y_test.value_counts().to_dict()}")
 
         return X_train, X_test, y_train, y_test
 
@@ -110,7 +110,7 @@ class SupplyChainClassifier:
         model = self.models[model_name]
         model.fit(X_train, y_train)
 
-        print(f" {model_name} training complete")
+        print(f"✅ {model_name} training complete")
 
         return model
 
@@ -213,7 +213,7 @@ class SupplyChainClassifier:
         self.best_model = self.models[best_name]
 
         print("\n" + "=" * 60)
-        print(f"<� BEST MODEL: {best_name}")
+        print(f"🏆 BEST MODEL: {best_name}")
         print(f"   F1 Score: {best_f1:.4f}")
         print("=" * 60)
 
@@ -237,7 +237,7 @@ class SupplyChainClassifier:
         elif hasattr(self.best_model, 'coef_'):
             importances = np.abs(self.best_model.coef_[0])
         else:
-            print("� Model does not support feature importance")
+            print("⚠️ Model does not support feature importance")
             return None
 
         # Create DataFrame
@@ -246,7 +246,7 @@ class SupplyChainClassifier:
             'importance': importances
         }).sort_values('importance', ascending=False).head(top_n)
 
-        print(f"\n= Top {top_n} Important Features ({self.best_model_name}):")
+        print(f"\n📊 Top {top_n} Important Features ({self.best_model_name}):")
         for idx, row in importance_df.iterrows():
             print(f"  {row['feature']:<30} {row['importance']:.4f}")
 
@@ -260,19 +260,19 @@ class SupplyChainClassifier:
             filename = f"{model_name.replace(' ', '_').lower()}_{timestamp}.pkl"
             filepath = self.model_dir / filename
             joblib.dump(model, filepath)
-            print(f" Saved {model_name} � {filepath}")
+            print(f"  ✅ Saved {model_name} → {filepath}")
 
         # Save best model separately
         best_filename = f"best_model_{timestamp}.pkl"
         best_filepath = self.model_dir / best_filename
         joblib.dump(self.best_model, best_filepath)
-        print(f" Saved best model ({self.best_model_name}) � {best_filepath}")
+        print(f"  ✅ Saved best model ({self.best_model_name}) → {best_filepath}")
 
         # Save results
         results_filename = f"training_results_{timestamp}.pkl"
         results_filepath = self.model_dir / results_filename
         joblib.dump(self.results, results_filepath)
-        print(f" Saved training results � {results_filepath}")
+        print(f"  ✅ Saved training results → {results_filepath}")
 
     def generate_report(self) -> str:
         """Generate a summary report of model performance."""
@@ -291,7 +291,7 @@ class SupplyChainClassifier:
                 report.append(f"  CV F1:     {results['cv_score']:.4f}")
 
         report.append("\n" + "=" * 80)
-        report.append(f"<� Best Model: {self.best_model_name}")
+        report.append(f"🏆 Best Model: {self.best_model_name}")
         report.append("=" * 80)
 
         report_text = "\n".join(report)
@@ -346,14 +346,14 @@ def run_training_pipeline():
     classifier.get_feature_importance(X.columns.tolist(), top_n=15)
 
     # Save models
-    print("\n=� Saving models...")
+    print("\n💾 Saving models...")
     classifier.save_models()
 
     # Generate report
     classifier.generate_report()
 
     print("\n" + "=" * 80)
-    print(" TRAINING PIPELINE COMPLETE!")
+    print("✅ TRAINING PIPELINE COMPLETE!")
     print("=" * 80)
 
     return classifier

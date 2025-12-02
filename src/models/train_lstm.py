@@ -119,10 +119,10 @@ class DemandForecaster:
         self.train_losses = []
         self.val_losses = []
 
-        print(f" Initialized DemandForecaster")
-        print(f"  Device: {self.device}")
-        print(f"  Sequence length: {sequence_length}")
-        print(f"  Hidden size: {hidden_size}")
+        print(f"✅ Initialized DemandForecaster")
+        print(f"   Device: {self.device}")
+        print(f"   Sequence length: {sequence_length}")
+        print(f"   Hidden size: {hidden_size}")
 
     def create_sequences(self, data: np.ndarray, target: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -180,22 +180,22 @@ class DemandForecaster:
         else:
             raise ValueError("No date column found for time series")
 
-        print(f" Daily aggregation: {data.shape[0]} days")
+        print(f"📊 Daily aggregation: {data.shape[0]} days")
 
         # Normalize data
         data_scaled = self.scaler.fit_transform(data)
 
         # Create sequences
         X, y = self.create_sequences(data_scaled, target=data_scaled[:, 0])
-        print(f" Created sequences: {X.shape[0]} sequences")
+        print(f"📊 Created sequences: {X.shape[0]} sequences")
 
         # Train/test split (temporal split - no shuffle)
         split_idx = int(len(X) * 0.8)
         X_train, X_test = X[:split_idx], X[split_idx:]
         y_train, y_test = y[:split_idx], y[split_idx:]
 
-        print(f" Train sequences: {X_train.shape[0]}")
-        print(f" Test sequences:  {X_test.shape[0]}")
+        print(f"📊 Train sequences: {X_train.shape[0]}")
+        print(f"📊 Test sequences:  {X_test.shape[0]}")
         print("=" * 60)
 
         return X_train, X_test, y_train, y_test
@@ -234,8 +234,8 @@ class DemandForecaster:
         criterion = nn.MSELoss()
         optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
-        print(f" Model initialized")
-        print(f"  Total parameters: {sum(p.numel() for p in self.model.parameters()):,}")
+        print(f"✅ Model initialized")
+        print(f"   Total parameters: {sum(p.numel() for p in self.model.parameters()):,}")
 
         # Training loop
         best_val_loss = float('inf')
@@ -295,14 +295,14 @@ class DemandForecaster:
             else:
                 patience_counter += 1
                 if patience_counter >= patience:
-                    print(f"\n� Early stopping at epoch {epoch + 1}")
+                    print(f"\n⚠️ Early stopping at epoch {epoch + 1}")
                     break
 
         # Load best model
         self.model.load_state_dict(self.best_model_state)
 
-        print("\n Training complete")
-        print(f"  Best validation loss: {best_val_loss:.6f}")
+        print("\n✅ Training complete")
+        print(f"   Best validation loss: {best_val_loss:.6f}")
         print("=" * 60)
 
     def evaluate_model(self, X_test: np.ndarray, y_test: np.ndarray) -> dict:
@@ -343,7 +343,7 @@ class DemandForecaster:
         print(f"\nTest Set Performance:")
         print(f"  RMSE:  {rmse:.6f}")
         print(f"  MAE:   {mae:.6f}")
-        print(f"  R�:    {r2:.4f}")
+        print(f"  R²:    {r2:.4f}")
         print(f"  MAPE:  {mape:.2f}%")
         print("=" * 60)
 
@@ -363,12 +363,12 @@ class DemandForecaster:
             'train_losses': self.train_losses,
             'val_losses': self.val_losses
         }, model_path)
-        print(f" Saved LSTM model � {model_path}")
+        print(f"  ✅ Saved LSTM model → {model_path}")
 
         # Save scaler
         scaler_path = self.model_dir / f"lstm_scaler_{timestamp}.pkl"
         joblib.dump(self.scaler, scaler_path)
-        print(f" Saved scaler � {scaler_path}")
+        print(f"  ✅ Saved scaler → {scaler_path}")
 
 
 def run_lstm_training_pipeline():
@@ -418,11 +418,11 @@ def run_lstm_training_pipeline():
     results = forecaster.evaluate_model(X_test, y_test)
 
     # Save model
-    print("\n=� Saving model...")
+    print("\n💾 Saving model...")
     forecaster.save_model()
 
     print("\n" + "=" * 80)
-    print(" LSTM TRAINING PIPELINE COMPLETE!")
+    print("✅ LSTM TRAINING PIPELINE COMPLETE!")
     print("=" * 80)
 
     return forecaster, results

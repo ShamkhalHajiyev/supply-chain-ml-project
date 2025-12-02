@@ -6,58 +6,113 @@ This data science project tackles critical supply chain optimization challenges 
 
 The solution employs a comprehensive machine learning pipeline that processes e-commerce transaction data to identify patterns leading to delivery delays and forecast future product demand. Through careful feature engineering and the application of both traditional ML models and deep learning approaches (LSTM networks), the system provides actionable insights for supply chain managers to optimize delivery reliability and inventory management decisions.
 
+## Quick Start
+
+### Running the Complete Pipeline
+
+```bash
+# Install dependencies
+uv sync
+
+# Run the full ML pipeline (data → preprocessing → features → training)
+python main.py --all
+```
+
+### Running Individual Steps
+
+```bash
+# Step 1: Download/load raw data
+python main.py --data
+
+# Step 2: Preprocess data
+python main.py --preprocess
+
+# Step 3: Build features
+python main.py --features
+
+# Step 4: Train ML classification models
+python main.py --train-ml
+
+# Step 5: Train LSTM forecasting model
+python main.py --train-lstm
+
+# Train all models (ML + LSTM)
+python main.py --train-all
+
+# Evaluate trained models
+python main.py --evaluate
+```
+
 ## Key Features & Technical Implementation
 
 - **Data Processing & Analysis**
   - Automated data loading from Kaggle with caching support
-  - Comprehensive exploratory data analysis (EDA) notebook with detailed visualizations
-  - Data quality assessment (missing values, duplicates, outliers, encoding issues)
+  - Comprehensive exploratory data analysis (EDA) notebooks
+  - Data quality assessment (missing values, duplicates, outliers)
   - Data cleaning pipeline with missing value imputation and standardization
   - Feature engineering for temporal, categorical, and geographic variables
-  - Feature selection analysis for classification and forecasting models
-  - Efficient data handling using Pandas with parquet storage for processed data
 
 - **Machine Learning Models**
-  - Classification models for delivery delay prediction
+  - Classification models for delivery delay prediction (Logistic Regression, Random Forest, Gradient Boosting)
   - LSTM-based deep learning models for time series demand forecasting
   - Model evaluation and performance optimization
   - Reproducible training pipelines
 
 - **Technical Stack**
   - Python 3.10+ with modern package management (uv)
-  - Data Processing: Pandas, NumPy, Polars
+  - Data Processing: Pandas, NumPy
   - Data Visualization: Plotly, Matplotlib, Seaborn
   - Machine Learning: Scikit-learn
   - Deep Learning: PyTorch
   - Data Storage: Parquet format for efficient storage
   - Development: Jupyter Notebooks
-  - Version Control: Git
 
 ## Project Structure
 
 ```
+├── main.py                    # CLI entry point for running pipeline
 ├── data/                      # Dataset storage
 │   ├── raw/                   # Raw data files
 │   ├── interim/               # Intermediate processed data
 │   ├── processed/             # Final processed datasets
 │   └── external/              # External data sources
 ├── models/                    # Trained model artifacts
-├── notebooks/                 # Jupyter notebooks for EDA
-│   └── eda.ipynb             # Comprehensive exploratory data analysis
+├── notebooks/                 # Jupyter notebooks for each step
+│   ├── 01_data_loading.ipynb          # Data loading & exploration
+│   ├── 02_preprocessing.ipynb          # Data cleaning & preprocessing
+│   ├── 03_feature_engineering.ipynb    # Feature creation
+│   ├── 04_ml_training.ipynb            # ML model training
+│   ├── 05_lstm_training.ipynb          # LSTM forecasting
+│   ├── eda.ipynb                       # Full exploratory analysis
+│   └── model_evaluation.ipynb          # Model evaluation
 ├── reports/                   # Analysis reports and visualizations
 │   ├── figures/              # Generated plots and charts
-│   └── logs/                 # Training logs and reports
+│   └── logs/                 # Training logs
 ├── src/
 │   ├── data/
-│   │   ├── data_manager.py   # Data loading and file management utilities
+│   │   ├── data_manager.py   # Data loading and file management
 │   │   └── preprocess.py     # Data preprocessing and cleaning
 │   ├── features/
-│   │   └── build_features.py # Feature engineering and transformation
+│   │   └── build_features.py # Feature engineering
 │   └── models/
-│       ├── train_lstm.py     # LSTM model training pipeline
-│       └── train_ml.py       # Machine learning model training
-└── utils/                     # Utility functions and helpers
+│       ├── train_lstm.py     # LSTM model training
+│       └── train_ml.py       # ML classification training
+├── utils/                     # Utility functions
+├── pyproject.toml            # Project dependencies
+└── uv.lock                   # Locked dependencies
 ```
+
+## Notebooks Guide
+
+The project includes step-by-step notebooks with detailed interpretation:
+
+| Notebook | Description | Key Learning |
+|----------|-------------|--------------|
+| `01_data_loading.ipynb` | Load and explore raw data | Data structure, quality issues |
+| `02_preprocessing.ipynb` | Clean and transform data | Missing values, outliers, encoding |
+| `03_feature_engineering.ipynb` | Create ML features | Temporal, customer, product features |
+| `04_ml_training.ipynb` | Train classification models | Model comparison, feature importance |
+| `05_lstm_training.ipynb` | Train LSTM forecaster | Time series, neural networks |
 
 ## Skills Demonstrated
 
@@ -69,15 +124,15 @@ The solution employs a comprehensive machine learning pipeline that processes e-
 - Business impact analysis
 - Supply chain optimization
 - Production-ready code development
-- Project organization and documentation
+- CLI application development
 
 ## Business Impact
 
-This project demonstrates significant real-world business value by addressing critical supply chain challenges. The models enable businesses to:
-- Reduce delivery delays through predictive analytics
-- Optimize inventory levels with accurate demand forecasting
-- Enhance customer satisfaction through reliable delivery predictions
-- Minimize operational costs through data-driven decision making
+This project demonstrates significant real-world business value by addressing critical supply chain challenges:
+- **Reduce delivery delays** through predictive analytics
+- **Optimize inventory levels** with accurate demand forecasting
+- **Enhance customer satisfaction** through reliable delivery predictions
+- **Minimize operational costs** through data-driven decision making
 
 ## Getting Started
 
@@ -94,19 +149,23 @@ This project demonstrates significant real-world business value by addressing cr
    # Install dependencies from pyproject.toml
    uv sync
    ```
-3. Run the EDA notebook:
-   ```bash
-   jupyter notebook notebooks/eda.ipynb
-   ```
-   The EDA notebook includes:
-   - Data overview and structure analysis
-   - Data quality assessment
-   - Exploratory analysis with visualizations
-   - Data cleaning operations
-   - Feature selection recommendations for ML models
-4. Execute training pipelines in `src/models/` for model development
 
-Note: This project uses uv for dependency management and virtual environments, ensuring reproducible environments and faster package installations.
+3. Run the pipeline:
+   ```bash
+   # Option A: Run complete pipeline
+   python main.py --all
+
+   # Option B: Run step by step
+   python main.py --data
+   python main.py --preprocess
+   python main.py --features
+   python main.py --train-all
+   ```
+
+4. Or explore the notebooks:
+   ```bash
+   jupyter notebook notebooks/01_data_loading.ipynb
+   ```
 
 ## Dataset
 
@@ -118,6 +177,36 @@ The project uses the [DataCo Supply Chain Dataset](https://www.kaggle.com/datase
 - Financial metrics (sales, benefits, profit ratios)
 
 The data is automatically downloaded on first use via the `data_manager.py` module.
+
+## Pipeline Architecture
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+│  Raw Data   │ ──▶ │ Preprocessing │ ──▶ │ Feature         │
+│  (Kaggle)   │     │  (cleaning)   │     │ Engineering     │
+└─────────────┘     └──────────────┘     └─────────────────┘
+                                                  │
+                    ┌─────────────────────────────┼─────────────────────────────┐
+                    │                             │                             │
+                    ▼                             ▼                             ▼
+           ┌───────────────┐            ┌───────────────┐             ┌───────────────┐
+           │ Logistic Reg  │            │ Random Forest │             │ Gradient Boost│
+           └───────────────┘            └───────────────┘             └───────────────┘
+                    │                             │                             │
+                    └─────────────────────────────┼─────────────────────────────┘
+                                                  ▼
+                                         ┌───────────────┐
+                                         │ Best Model    │
+                                         │ Selection     │
+                                         └───────────────┘
+                                                  │
+                    ┌─────────────────────────────┼─────────────────────────────┐
+                    ▼                                                           ▼
+           ┌───────────────┐                                          ┌───────────────┐
+           │ Classification│                                          │     LSTM      │
+           │ (Late Delivery)│                                          │ (Forecasting) │
+           └───────────────┘                                          └───────────────┘
+```
 
 ## Portfolio Value
 

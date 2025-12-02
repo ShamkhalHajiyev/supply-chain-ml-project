@@ -77,7 +77,7 @@ class DataPreprocessor:
         # Datetime columns: forward fill
         datetime_cols = df.select_dtypes(include=['datetime64']).columns
         for col in datetime_cols:
-            df[col].fillna(method='ffill', inplace=True)
+            df[col] = df[col].ffill()
 
         return df
 
