@@ -7,7 +7,7 @@ available at ORDER TIME (before delivery outcome is known).
 
 LEAKY COLUMNS TO AVOID:
 - late_delivery_risk (this IS the target)
-- delivery_status (this IS the target) 
+- delivery_status (this IS the target)
 - days_for_shipping_(real) (only known after delivery)
 - delivery_days (calculated from actual shipping date)
 """
@@ -38,7 +38,7 @@ class FeatureEngineer:
     Creates features for:
     1. Late delivery classification (using only pre-delivery features)
     2. Demand forecasting (time series)
-    
+
     NOTE: All features are derived from information available AT ORDER TIME
     to prevent data leakage.
     """
@@ -52,7 +52,7 @@ class FeatureEngineer:
     def create_temporal_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Extract temporal features from ORDER dates only.
-        
+
         NOTE: We use order_date, NOT shipping_date (which would be leakage).
 
         Features:
@@ -152,7 +152,7 @@ class FeatureEngineer:
         - Scheduled shipping days (NOT actual)
         - Geographic distance proxy
         - Order priority
-        
+
         NOTE: days_for_shipment_(scheduled) IS safe - it's the promised delivery time
         """
         # Shipping urgency (based on shipping mode)
@@ -168,7 +168,7 @@ class FeatureEngineer:
         # Scheduled days for shipping (this is SAFE - it's the promised time)
         if 'days_for_shipment_(scheduled)' in df.columns:
             df['scheduled_shipping_days'] = df['days_for_shipment_(scheduled)']
-        
+
         # Order priority encoding
         if 'order_region' in df.columns and 'order_country' in df.columns:
             # Create region-country combination as proxy for distance
@@ -230,7 +230,7 @@ class FeatureEngineer:
     def encode_categorical_features(self, df: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
         """
         Encode categorical variables using label encoding.
-        
+
         IMPORTANT: Excludes 'delivery_status' to prevent data leakage!
 
         Args:
@@ -271,7 +271,7 @@ class FeatureEngineer:
     def select_features_for_classification(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Select features for late delivery classification.
-        
+
         IMPORTANT: Only uses features available at ORDER TIME.
         Excludes all post-delivery information to prevent leakage.
 
@@ -309,14 +309,14 @@ class FeatureEngineer:
 
         # Remove duplicates and VERIFY no leaky columns
         feature_cols = list(set(feature_cols))
-        feature_cols = [c for c in feature_cols if c.lower() not in LEAKY_COLUMNS 
+        feature_cols = [c for c in feature_cols if c.lower() not in LEAKY_COLUMNS
                         and not c.lower().startswith('delivery')]
 
         print(f"\n✅ Selected {len(feature_cols)} features for classification")
         print(f"   (Verified: No leaky features included)")
 
         X = df[feature_cols].copy()
-        
+
         # Use late_delivery_risk directly if available, otherwise create from delivery_status
         if 'late_delivery_risk' in df.columns:
             y = df['late_delivery_risk'].astype(int)
