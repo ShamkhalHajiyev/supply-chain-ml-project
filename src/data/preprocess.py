@@ -271,6 +271,30 @@ def load_and_preprocess(raw_path: str = None) -> pd.DataFrame:
     return df_clean
 
 
+def load_or_preprocess(raw_path: str = None, force_refresh: bool = False) -> pd.DataFrame:
+    """
+    Load the latest preprocessed parquet if available; otherwise run preprocessing.
+
+    Args:
+        raw_path: Optional path to a raw CSV file to preprocess.
+        force_refresh: If True, always rerun preprocessing even if cached data exists.
+
+    Returns:
+        Preprocessed DataFrame (loaded from cache or freshly generated).
+    """
+    from .data_manager import load_latest_interim
+
+    if not force_refresh:
+        try:
+            df_cached = load_latest_interim()
+            print("✅ Loaded cached preprocessed data from data/interim")
+            return df_cached
+        except FileNotFoundError:
+            print("⚠️ No cached preprocessed data found. Running preprocessing...")
+
+    return load_and_preprocess(raw_path)
+
+
 if __name__ == "__main__":
     # Run preprocessing pipeline
     df_cleaned = load_and_preprocess()
