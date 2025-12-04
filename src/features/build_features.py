@@ -1,6 +1,6 @@
 """
 Feature Engineering Module
-Transforms preprocessed data into ML-ready features for classification and forecasting.
+Transforms preprocessed data into ML-ready features for late delivery classification.
 
 IMPORTANT: This module carefully avoids data leakage by only using features
 available at ORDER TIME (before delivery outcome is known).
@@ -33,11 +33,9 @@ LEAKY_COLUMNS = {
 
 class FeatureEngineer:
     """
-    Feature engineering for supply chain ML models.
+    Feature engineering for late delivery classification.
 
-    Creates features for:
-    1. Late delivery classification (using only pre-delivery features)
-    2. Demand forecasting (time series)
+    Creates features for late delivery prediction using only pre-delivery features.
 
     NOTE: All features are derived from information available AT ORDER TIME
     to prevent data leakage.
@@ -204,28 +202,6 @@ class FeatureEngineer:
 
         return df
 
-    def create_aggregated_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Create time-based aggregated features for demand forecasting.
-
-        Features:
-        - Rolling averages
-        - Lag features
-        """
-        if 'order_date_(dateorders)' in df.columns and 'order_item_quantity' in df.columns:
-            # Sort by date
-            df = df.sort_values('order_date_(dateorders)')
-
-            # Daily aggregation for time series
-            daily_orders = df.groupby('order_date_(dateorders)').agg({
-                'order_item_quantity': 'sum',
-                'sales': 'sum'
-            }).reset_index()
-
-            # This will be used in LSTM training
-            df._daily_aggregation = daily_orders
-
-        return df
 
     def encode_categorical_features(self, df: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
         """
@@ -328,30 +304,6 @@ class FeatureEngineer:
 
         return X, y
 
-    def select_features_for_forecasting(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Select features for time series demand forecasting.
-
-        Returns:
-            DataFrame with time series features
-        """
-        ts_features = []
-
-        # Temporal features
-        temporal = ['order_day_of_week', 'order_month', 'order_quarter', 'is_weekend', 'days_since_start']
-        ts_features.extend([c for c in temporal if c in df.columns])
-
-        # Product features
-        product = ['product_popularity', 'category_popularity']
-        ts_features.extend([c for c in product if c in df.columns])
-
-        # Target
-        if 'order_item_quantity' in df.columns:
-            ts_features.append('order_item_quantity')
-
-        print(f"\n✅ Selected {len(ts_features)} features for forecasting")
-
-        return df[ts_features].copy()
 
     def fit_transform(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """

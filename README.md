@@ -1,24 +1,22 @@
 # Supply Chain Analytics
-## ML-Powered Delivery Prediction & Demand Forecasting
+## ML-Powered Late Delivery Detection
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Project Overview
 
-End-to-end machine learning system for supply chain optimization with two components:
+End-to-end machine learning system for late delivery detection:
 - **Classification**: Late delivery prediction (13 models including advanced ensembles)
-- **Forecasting**: Demand prediction (11 models: ML + Statistical + Deep Learning)
 
 **Key Features:**
 - 🚀 **Modern Boosting** - CatBoost, LightGBM, XGBoost for state-of-the-art performance
 - 🎯 **Enhanced Ensembles** - Stacking with 6 base learners (F1=0.89)
 - 🔧 **Optuna Optimization** - Bayesian hyperparameter tuning (TPE algorithm)
-- 📈 **Advanced Forecasting** - Prophet, SARIMAX, Weighted Ensemble
 - 🎨 **Enhanced Features** - RFM, Zone-based aggregations, Interactions (+51% features)
 - 📊 **Comprehensive Evaluation** - ROC, PR curves, Calibration, Learning curves
 - 🔍 **SHAP Explanations** - Interpretable model insights
-- 📓 **7 Detailed Notebooks** - Step-by-step analysis
+- 📓 **Detailed Notebooks** - Step-by-step analysis
 - 🚀 **Parallel Training** - Fast model training using all CPU cores
 - ⚠️ **Data Leakage Prevention** - Proper feature selection (realistic 70-85% accuracy)
 
@@ -32,9 +30,7 @@ uv sync
 python main.py --all
 
 # Or individual steps
-python main.py --train-classification   # 8 classification models
-python main.py --train-forecasting      # 7 ML forecasting models
-python main.py --train-lstm             # LSTM (optional)
+python main.py --train-classification   # Classification models
 ```
 
 ## CLI Commands
@@ -46,10 +42,10 @@ python main.py --train-lstm             # LSTM (optional)
 | `--preprocess` | Preprocess data |
 | `--features` | Build features |
 | `--train-classification` | Train classifiers (with parallel execution) |
-| `--train-forecasting` | Train ML forecasters |
-| `--train-lstm` | Train LSTM model |
 | `--evaluate` | Evaluate trained models |
 | `--no-parallel` | Disable parallel training (debug mode) |
+| `--no-tuning` | Skip hyperparameter tuning |
+| `--no-threshold-opt` | Skip threshold optimization |
 
 ## Project Structure
 
@@ -63,13 +59,10 @@ supply-chain-ml-project/
 │   └── processed/                  # ML-ready features
 ├── models/                         # Saved models (.pkl, .pt)
 ├── notebooks/
-│   ├── 01_data_loading.ipynb
-│   ├── 02_exploratory_analysis.ipynb
-│   ├── 03_data_preprocessing.ipynb
-│   ├── 04_feature_engineering.ipynb
-│   ├── 05_classification_modeling.ipynb
-│   ├── 06_demand_forecasting.ipynb
-│   └── 07_model_evaluation.ipynb
+│   ├── 01_exploratory_analysis.ipynb
+│   ├── 02_data_preprocessing.ipynb
+│   ├── 03_feature_engineering.ipynb
+│   └── 04_model_evaluation.ipynb
 ├── src/
 │   ├── data/
 │   │   ├── data_manager.py         # Kaggle API, caching
@@ -77,9 +70,8 @@ supply-chain-ml-project/
 │   ├── features/
 │   │   └── build_features.py       # 60+ features
 │   └── models/
-│       ├── classifier.py           # 8 classification models
-│       ├── forecaster.py           # 7 ML forecasting models
-│       └── forecaster_lstm.py      # LSTM deep learning
+│       ├── classifier.py           # Classification models
+│       └── classifier_optimized.py # Optimized classifiers with Optuna
 └── reports/
     ├── figures/
     └── logs/
@@ -89,13 +81,10 @@ supply-chain-ml-project/
 
 | # | Notebook | Key Topics |
 |---|----------|------------|
-| 01 | Data Loading | Dataset structure, target variables |
-| 02 | Exploratory Analysis | Distributions, correlations |
-| 03 | Data Preprocessing | Missing values, outliers |
-| 04 | Feature Engineering | 60+ features across 5 categories |
-| 05 | **Classification** | 8 models, ensembles, SHAP |
-| 06 | **Forecasting** | 7 ML models vs LSTM |
-| 07 | Model Evaluation | Business impact, recommendations |
+| 01 | Exploratory Analysis | Dataset structure, distributions, correlations |
+| 02 | Data Preprocessing | Missing values, outliers, data cleaning |
+| 03 | Feature Engineering | 60+ features across 5 categories |
+| 04 | Model Evaluation | Classification models, ensembles, SHAP, business impact |
 
 ## Models
 
@@ -119,20 +108,6 @@ supply-chain-ml-project/
 
 **NEW: Optuna-tuned variants available** for XGBoost, CatBoost, LightGBM (+2-3% F1)
 
-### Forecasting (Demand)
-
-| Model | Type | Test R² | Test RMSE | Status |
-|-------|------|---------|-----------|--------|
-| Ridge/Lasso/ElasticNet | Linear | ~0.67 | ~51.0 | Baseline |
-| Random Forest | Ensemble | ~0.77 | ~42.9 | Good |
-| Gradient Boosting | Boosting | ~0.79 | ~41.1 | Good |
-| XGBoost | Boosting | ~0.81 | ~39.2 | Excellent |
-| Extra Trees | Ensemble | ~0.76 | ~43.8 | Good |
-| **Prophet** | **Statistical** | **~0.79** | **~41.0** | ✅ **NEW** |
-| **SARIMAX** | **Statistical** | **~0.77** | **~43.0** | ✅ **NEW** |
-| LSTM | Deep Learning | ~0.77 | ~42.8 | Good |
-| **Ensemble (Weighted)** | **Meta** | **~0.83** | **~37.1** | ✅ **BEST**
-
 ## Technical Stack
 
 | Category | Technologies |
@@ -142,9 +117,7 @@ supply-chain-ml-project/
 | Data | Pandas, NumPy, Polars |
 | ML | Scikit-learn, XGBoost, **CatBoost**, **LightGBM** |
 | Optimization | **Optuna** (Bayesian hyperparameter tuning) |
-| Time Series | **Prophet**, **Statsmodels** (SARIMAX) |
 | Imbalanced Data | **imbalanced-learn** (SMOTE) |
-| Deep Learning | PyTorch |
 | Visualization | Matplotlib, Seaborn, Plotly |
 | Explainability | SHAP |
 | Storage | Parquet |
@@ -196,15 +169,9 @@ This is why our models achieve ~70% accuracy instead of 100%. The 100% accuracy 
 **Optimized System (vs Baseline):**
 - 📉 **15-20% reduction** in late deliveries (+5pp improvement)
 - 🎯 **89% delay detection rate** (vs 74% baseline) (+20% improvement)
-- 💰 **$988K annual savings** (vs $762K baseline) (+30% improvement)
-- 📦 **12-18% inventory optimization** through better demand forecasting
+- 💰 **$616K annual savings** from late delivery prevention
 - 📈 **+12-15 NPS points** from proactive customer communication
 - ⚡ **<100ms prediction latency** (production-ready)
-
-**Detailed ROI Analysis:**
-- Classification ROI: $616K/year (late delivery prevention)
-- Forecasting ROI: $372K/year (inventory optimization)
-- Combined: **$988K/year** for mid-sized e-commerce ($50M GMV)
 
 ## Documentation
 

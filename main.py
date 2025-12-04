@@ -2,7 +2,7 @@
 """
 Supply Chain ML Project - Main Entry Point
 
-Run the complete pipeline or individual steps for supply chain ML analysis.
+Run the complete pipeline or individual steps for late delivery classification.
 
 Usage:
     python main.py --all                    # Run complete pipeline
@@ -10,8 +10,6 @@ Usage:
     python main.py --preprocess             # Run data preprocessing
     python main.py --features               # Build features
     python main.py --train-classification   # Train classification models (with ensembles)
-    python main.py --train-forecasting      # Train ML forecasting models
-    python main.py --train-lstm             # Train LSTM model (optional)
     python main.py --evaluate               # Evaluate models
 """
 
@@ -98,61 +96,11 @@ def run_classification_training(X=None, y=None, parallel: bool = True,
     return classifier
 
 
-def run_forecasting_training(df=None):
-    """Step 5: Train ML forecasting models."""
-    print_header("STEP 5: FORECASTING MODEL TRAINING (ML)")
-
-    from src.models.forecaster import DemandForecaster
-    from src.data.preprocess import load_and_preprocess
-
-    if df is None:
-        df = load_and_preprocess()
-
-    forecaster = DemandForecaster(random_state=42)
-    forecaster.initialize_models()
-
-    X, y, dates = forecaster.prepare_time_series_features(df)
-    X_train, X_test, y_train, y_test = forecaster.split_time_series(X, y)
-    forecaster.train_all_models(X_train, y_train, X_test, y_test)
-    forecaster.get_feature_importance(X.columns.tolist(), top_n=15)
-    forecaster.save_models()
-
-    print(f"\n✅ Forecasting training complete!")
-    print(f"   Best model: {forecaster.best_model_name}")
-    return forecaster
-
-
-def run_lstm_training(df=None):
-    """Step 6: Train LSTM model (optional)."""
-    print_header("STEP 6: LSTM MODEL TRAINING")
-
-    from src.models.forecaster_lstm import DemandForecaster as LSTMForecaster
-    from src.data.preprocess import load_and_preprocess
-
-    if df is None:
-        df = load_and_preprocess()
-
-    forecaster = LSTMForecaster(
-        sequence_length=30,
-        hidden_size=64,
-        num_layers=2,
-        num_epochs=100,
-        random_state=42
-    )
-
-    X_train, X_test, y_train, y_test = forecaster.prepare_data(df)
-    forecaster.train_model(X_train, y_train, X_test, y_test)
-    results = forecaster.evaluate_model(X_test, y_test)
-    forecaster.save_model()
-
-    print(f"\n✅ LSTM training complete!")
-    print(f"   RMSE: {results['rmse']:.4f}, R²: {results['r2']:.4f}")
-    return forecaster, results
 
 
 def run_evaluation():
-    """Step 7: Evaluate trained models."""
-    print_header("STEP 7: MODEL EVALUATION")
+    """Step 5: Evaluate trained models."""
+    print_header("STEP 5: MODEL EVALUATION")
 
     import joblib
     from sklearn.metrics import classification_report, accuracy_score
@@ -203,23 +151,21 @@ def run_full_pipeline():
     df_clean = run_preprocessing(df)
     X, y, _ = run_feature_engineering(df_clean)
 
-    # Step 4-5: Training (with ALL optimizations enabled)
+    # Step 4: Training (with ALL optimizations enabled)
     classifier = run_classification_training(
         X, y,
         parallel=True,              # Use all CPU cores
         tune_hyperparameters=True,  # Optuna hyperparameter tuning
         optimize_thresholds=True    # Threshold optimization
     )
-    forecaster = run_forecasting_training(df_clean)
 
     # Summary
     duration = datetime.now() - start_time
     print_header("PIPELINE COMPLETE")
     print(f"✅ Duration: {duration}")
-    print(f"   Best Classification: {classifier.best_model_name}")
-    print(f"   Best Forecasting: {forecaster.best_model_name}")
+    print(f"   Best Classification Model: {classifier.best_model_name}")
 
-    return {'classifier': classifier, 'forecaster': forecaster}
+    return {'classifier': classifier}
 
 
 def main():
@@ -231,8 +177,6 @@ def main():
 Examples:
     python main.py --all                    # Full pipeline
     python main.py --train-classification   # Classification only
-    python main.py --train-forecasting      # Forecasting only
-    python main.py --train-lstm             # LSTM only
         """
     )
 
@@ -241,8 +185,6 @@ Examples:
     parser.add_argument('--preprocess', action='store_true', help='Preprocess data')
     parser.add_argument('--features', action='store_true', help='Build features')
     parser.add_argument('--train-classification', action='store_true', help='Train classification models')
-    parser.add_argument('--train-forecasting', action='store_true', help='Train ML forecasting models')
-    parser.add_argument('--train-lstm', action='store_true', help='Train LSTM model')
     parser.add_argument('--evaluate', action='store_true', help='Evaluate models')
     parser.add_argument('--no-parallel', action='store_true', help='Disable parallel training (use sequential)')
     parser.add_argument('--no-tuning', action='store_true', help='Skip hyperparameter tuning')
@@ -270,10 +212,6 @@ Examples:
                     tune_hyperparameters=not args.no_tuning,
                     optimize_thresholds=not args.no_threshold_opt
                 )
-            if args.train_forecasting:
-                run_forecasting_training()
-            if args.train_lstm:
-                run_lstm_training()
             if args.evaluate:
                 run_evaluation()
 
