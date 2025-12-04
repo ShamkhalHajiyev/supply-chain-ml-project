@@ -27,14 +27,23 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score,
-    f1_score, accuracy_score, precision_score, recall_score
+    f1_score, accuracy_score, precision_score, recall_score,
+    roc_curve, precision_recall_curve
 )
 from joblib import Parallel, delayed
 import joblib
 from datetime import datetime
-from typing import Dict, Tuple, Any, List
+from typing import Dict, Tuple, Any, List, Optional
 import warnings
 warnings.filterwarnings('ignore')
+
+# Optional imports for hyperparameter tuning
+try:
+    import optuna
+    OPTUNA_AVAILABLE = True
+except ImportError:
+    OPTUNA_AVAILABLE = False
+    warnings.warn("Optuna not available. Hyperparameter tuning will be disabled.")
 
 
 class SupplyChainClassifier:
@@ -69,6 +78,8 @@ class SupplyChainClassifier:
         self.best_model = None
         self.best_model_name = None
         self.overfitting_analysis: Dict[str, Dict] = {}
+        self.optimal_thresholds: Dict[str, float] = {}  # Store optimal thresholds
+        self.tuned_models: Dict[str, Any] = {}  # Store hyperparameter-tuned models
         self.model_dir = Path(__file__).parents[2] / "models"
         self.model_dir.mkdir(exist_ok=True)
 
@@ -134,15 +145,37 @@ class SupplyChainClassifier:
         for name in self.models.keys():
             print(f"   • {name}")
 
-    def split_data(self, X: pd.DataFrame, y: pd.Series, test_size: float = 0.2) -> Tuple:
-        """Split data with stratification."""
-        X_train, X_test, y_train, y_test = train_test_split(
+    def split_data(self, X: pd.DataFrame, y: pd.Series, test_size: float = 0.2,
+                   val_size: float = 0.1) -> Tuple:
+        """
+        Split data with stratification into train/val/test.
+
+        Args:
+            X: Features
+            y: Targets
+            test_size: Proportion for test set
+            val_size: Proportion for validation set (from remaining after test)
+
+        Returns:
+            X_train, X_val, X_test, y_train, y_val, y_test
+        """
+        # First split: train+val vs test
+        X_train_val, X_test, y_train_val, y_test = train_test_split(
             X, y, test_size=test_size, random_state=self.random_state, stratify=y
         )
+
+        # Second split: train vs val
+        val_size_adjusted = val_size / (1 - test_size)  # Adjust for remaining data
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train_val, y_train_val, test_size=val_size_adjusted,
+            random_state=self.random_state, stratify=y_train_val
+        )
+
         print(f"\n📊 Data split:")
-        print(f"   Train: {X_train.shape[0]:,} ({100-test_size*100:.0f}%)")
+        print(f"   Train: {X_train.shape[0]:,} ({100-test_size*100-val_size*100:.0f}%)")
+        print(f"   Val:   {X_val.shape[0]:,} ({val_size*100:.0f}%)")
         print(f"   Test:  {X_test.shape[0]:,} ({test_size*100:.0f}%)")
-        return X_train, X_test, y_train, y_test
+        return X_train, X_val, X_test, y_train, y_val, y_test
 
     def _train_single_model(self, model_name: str, model: Any,
                             X_train: pd.DataFrame, y_train: pd.Series) -> Tuple[str, Any]:
@@ -314,6 +347,284 @@ class SupplyChainClassifier:
         df = pd.DataFrame({'feature': feature_names, 'importance': importances})
         return df.sort_values('importance', ascending=False).head(top_n)
 
+    def optimize_threshold(self, model_name: str, model: Any, X_val: pd.DataFrame,
+                           y_val: pd.Series, metric: str = 'f1') -> float:
+        """
+        Optimize classification threshold for a model.
+
+        Args:
+            model_name: Name of the model
+            model: Trained model
+            X_val: Validation features
+            y_val: Validation targets
+            metric: Metric to optimize ('f1', 'youden', 'precision_recall')
+
+        Returns:
+            Optimal threshold value
+        """
+        if not hasattr(model, 'predict_proba'):
+            print(f"⚠️ {model_name} does not support probability predictions. Using default threshold 0.5.")
+            return 0.5
+
+        y_proba = model.predict_proba(X_val)[:, 1]
+
+        if metric == 'f1':
+            # Optimize F1 score
+            thresholds = np.arange(0.1, 0.9, 0.01)
+            best_threshold = 0.5
+            best_f1 = 0
+
+            for threshold in thresholds:
+                y_pred = (y_proba >= threshold).astype(int)
+                f1 = f1_score(y_val, y_pred, average='weighted')
+                if f1 > best_f1:
+                    best_f1 = f1
+                    best_threshold = threshold
+
+        elif metric == 'youden':
+            # Youden's J statistic (maximize TPR - FPR)
+            fpr, tpr, thresholds = roc_curve(y_val, y_proba)
+            j_scores = tpr - fpr
+            best_idx = np.argmax(j_scores)
+            best_threshold = thresholds[best_idx]
+
+        elif metric == 'precision_recall':
+            # Optimize F1 on precision-recall curve
+            precision, recall, thresholds = precision_recall_curve(y_val, y_proba)
+            f1_scores = 2 * (precision * recall) / (precision + recall + 1e-10)
+            best_idx = np.argmax(f1_scores)
+            best_threshold = thresholds[best_idx] if best_idx < len(thresholds) else 0.5
+
+        else:
+            best_threshold = 0.5
+
+        self.optimal_thresholds[model_name] = best_threshold
+        return best_threshold
+
+    def optimize_all_thresholds(self, X_val: pd.DataFrame, y_val: pd.Series,
+                                 metric: str = 'f1'):
+        """
+        Optimize thresholds for all models.
+
+        Args:
+            X_val: Validation features
+            y_val: Validation targets
+            metric: Metric to optimize
+        """
+        print("\n" + "=" * 60)
+        print("THRESHOLD OPTIMIZATION")
+        print("=" * 60)
+
+        for model_name, model in self.models.items():
+            threshold = self.optimize_threshold(model_name, model, X_val, y_val, metric)
+            print(f"  {model_name:<25} Optimal threshold: {threshold:.4f}")
+
+        print("=" * 60)
+
+    def evaluate_with_optimal_threshold(self, model_name: str, model: Any,
+                                        X_test: pd.DataFrame, y_test: pd.Series) -> Dict:
+        """
+        Evaluate model using optimized threshold.
+
+        Args:
+            model_name: Name of the model
+            model: Trained model
+            X_test: Test features
+            y_test: Test targets
+
+        Returns:
+            Dictionary with metrics using optimal threshold
+        """
+        if not hasattr(model, 'predict_proba'):
+            y_pred = model.predict(X_test)
+        else:
+            threshold = self.optimal_thresholds.get(model_name, 0.5)
+            y_proba = model.predict_proba(X_test)[:, 1]
+            y_pred = (y_proba >= threshold).astype(int)
+
+        return {
+            'accuracy': accuracy_score(y_test, y_pred),
+            'f1': f1_score(y_test, y_pred, average='weighted'),
+            'precision': precision_score(y_test, y_pred, average='weighted'),
+            'recall': recall_score(y_test, y_pred, average='weighted'),
+            'threshold': self.optimal_thresholds.get(model_name, 0.5)
+        }
+
+    def tune_hyperparameters(self, model_name: str, model_type: str,
+                           X_train: pd.DataFrame, y_train: pd.Series,
+                           X_val: pd.DataFrame, y_val: pd.Series,
+                           n_trials: int = 50) -> Any:
+        """
+        Tune hyperparameters using Optuna.
+
+        Args:
+            model_name: Name of the model
+            model_type: Type of model ('logistic', 'tree', 'rf', 'et', 'gb', 'ada')
+            X_train: Training features
+            y_train: Training targets
+            X_val: Validation features
+            y_val: Validation targets
+            n_trials: Number of Optuna trials
+
+        Returns:
+            Best tuned model
+        """
+        if not OPTUNA_AVAILABLE:
+            print(f"⚠️ Optuna not available. Skipping hyperparameter tuning for {model_name}.")
+            return None
+
+        print(f"\n🔍 Tuning hyperparameters for {model_name} ({n_trials} trials)...")
+
+        def objective(trial):
+            if model_type == 'logistic':
+                model = LogisticRegression(
+                    max_iter=1000,
+                    random_state=self.random_state,
+                    class_weight='balanced',
+                    solver=trial.suggest_categorical('solver', ['lbfgs', 'liblinear', 'saga']),
+                    C=trial.suggest_float('C', 0.01, 100, log=True),
+                    n_jobs=self.n_jobs
+                )
+
+            elif model_type == 'tree':
+                model = DecisionTreeClassifier(
+                    max_depth=trial.suggest_int('max_depth', 5, 30),
+                    min_samples_split=trial.suggest_int('min_samples_split', 2, 20),
+                    min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10),
+                    random_state=self.random_state,
+                    class_weight='balanced'
+                )
+
+            elif model_type == 'rf':
+                model = RandomForestClassifier(
+                    n_estimators=trial.suggest_int('n_estimators', 50, 300),
+                    max_depth=trial.suggest_int('max_depth', 5, 30),
+                    min_samples_split=trial.suggest_int('min_samples_split', 2, 20),
+                    min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10),
+                    max_features=trial.suggest_categorical('max_features', ['sqrt', 'log2', None]),
+                    random_state=self.random_state,
+                    class_weight='balanced',
+                    n_jobs=self.n_jobs
+                )
+
+            elif model_type == 'et':
+                model = ExtraTreesClassifier(
+                    n_estimators=trial.suggest_int('n_estimators', 50, 300),
+                    max_depth=trial.suggest_int('max_depth', 5, 30),
+                    min_samples_split=trial.suggest_int('min_samples_split', 2, 20),
+                    min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10),
+                    random_state=self.random_state,
+                    class_weight='balanced',
+                    n_jobs=self.n_jobs
+                )
+
+            elif model_type == 'gb':
+                model = GradientBoostingClassifier(
+                    n_estimators=trial.suggest_int('n_estimators', 50, 300),
+                    learning_rate=trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+                    max_depth=trial.suggest_int('max_depth', 3, 10),
+                    min_samples_split=trial.suggest_int('min_samples_split', 2, 20),
+                    min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10),
+                    subsample=trial.suggest_float('subsample', 0.6, 1.0),
+                    random_state=self.random_state
+                )
+
+            elif model_type == 'ada':
+                model = AdaBoostClassifier(
+                    n_estimators=trial.suggest_int('n_estimators', 50, 200),
+                    learning_rate=trial.suggest_float('learning_rate', 0.01, 2.0, log=True),
+                    random_state=self.random_state,
+                    algorithm='SAMME'
+                )
+
+            else:
+                return None
+
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_val)
+            score = f1_score(y_val, y_pred, average='weighted')
+            return score
+
+        study = optuna.create_study(direction='maximize', sampler=optuna.samplers.TPESampler(seed=self.random_state))
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+
+        # Train best model on full training set
+        best_params = study.best_params
+
+        if model_type == 'logistic':
+            best_model = LogisticRegression(
+                max_iter=1000, random_state=self.random_state, class_weight='balanced',
+                n_jobs=self.n_jobs, **best_params
+            )
+        elif model_type == 'tree':
+            best_model = DecisionTreeClassifier(
+                random_state=self.random_state, class_weight='balanced', **best_params
+            )
+        elif model_type == 'rf':
+            best_model = RandomForestClassifier(
+                random_state=self.random_state, class_weight='balanced',
+                n_jobs=self.n_jobs, **best_params
+            )
+        elif model_type == 'et':
+            best_model = ExtraTreesClassifier(
+                random_state=self.random_state, class_weight='balanced',
+                n_jobs=self.n_jobs, **best_params
+            )
+        elif model_type == 'gb':
+            best_model = GradientBoostingClassifier(
+                random_state=self.random_state, **best_params
+            )
+        elif model_type == 'ada':
+            best_model = AdaBoostClassifier(
+                random_state=self.random_state, algorithm='SAMME', **best_params
+            )
+
+        best_model.fit(X_train, y_train)
+        self.tuned_models[model_name] = best_model
+
+        print(f"  ✅ Best F1: {study.best_value:.4f}")
+        print(f"  📊 Best params: {best_params}")
+
+        return best_model
+
+    def tune_all_models(self, X_train: pd.DataFrame, y_train: pd.Series,
+                       X_val: pd.DataFrame, y_val: pd.Series, n_trials: int = 30):
+        """
+        Tune hyperparameters for all base models (not ensembles).
+
+        Args:
+            X_train: Training features
+            y_train: Training targets
+            X_val: Validation features
+            y_val: Validation targets
+            n_trials: Number of trials per model
+        """
+        if not OPTUNA_AVAILABLE:
+            print("⚠️ Optuna not available. Skipping hyperparameter tuning.")
+            return
+
+        print("\n" + "=" * 60)
+        print("HYPERPARAMETER TUNING")
+        print("=" * 60)
+
+        model_configs = {
+            'Logistic Regression': 'logistic',
+            'Decision Tree': 'tree',
+            'Random Forest': 'rf',
+            'Extra Trees': 'et',
+            'Gradient Boosting': 'gb',
+            'AdaBoost': 'ada'
+        }
+
+        for model_name, model_type in model_configs.items():
+            if model_name in self.models:
+                self.tune_hyperparameters(
+                    model_name, model_type, X_train, y_train, X_val, y_val, n_trials
+                )
+
+        print("=" * 60)
+        print("✅ Hyperparameter tuning complete!")
+
     def get_comparison_dataframe(self) -> pd.DataFrame:
         """Get comparison DataFrame of all models."""
         data = [{
@@ -324,7 +635,7 @@ class SupplyChainClassifier:
         return pd.DataFrame(data).sort_values('Test F1', ascending=False)
 
     def save_models(self):
-        """Save all trained models."""
+        """Save all trained models and optimal thresholds."""
         ts = datetime.now().strftime("%Y%m%d_%H%M")
         for name, model in self.models.items():
             path = self.model_dir / f"{name.replace(' ', '_').lower()}_{ts}.pkl"
@@ -334,6 +645,12 @@ class SupplyChainClassifier:
         joblib.dump(self.best_model, best_path)
         print(f"  ✅ Saved best model → {best_path}")
         joblib.dump(self.results, self.model_dir / f"training_results_{ts}.pkl")
+
+        # Save optimal thresholds
+        if self.optimal_thresholds:
+            thresholds_path = self.model_dir / f"optimal_thresholds_{ts}.pkl"
+            joblib.dump(self.optimal_thresholds, thresholds_path)
+            print(f"  ✅ Saved optimal thresholds → {thresholds_path}")
 
     def generate_report(self) -> str:
         """Generate summary report."""
@@ -346,12 +663,17 @@ class SupplyChainClassifier:
         return text
 
 
-def run_training_pipeline(parallel: bool = True):
+def run_training_pipeline(parallel: bool = True, tune_hyperparameters: bool = True,
+                          optimize_thresholds: bool = True, n_trials: int = 30):
     """
-    Complete classification training pipeline.
+    Complete classification training pipeline with **threshold optimization first,
+    then hyperparameter tuning**, as requested.
 
     Args:
         parallel: If True, use parallel training. If False, train sequentially.
+        tune_hyperparameters: If True, perform hyperparameter tuning with Optuna.
+        optimize_thresholds: If True, optimize classification thresholds.
+        n_trials: Number of Optuna trials per model (if tuning enabled).
     """
     print("\n" + "=" * 80 + "\nCLASSIFICATION TRAINING PIPELINE\n" + "=" * 80)
     from src.data.preprocess import load_and_preprocess
@@ -362,12 +684,92 @@ def run_training_pipeline(parallel: bool = True):
 
     classifier = SupplyChainClassifier(random_state=42, n_jobs=-1)
     classifier.initialize_models(include_ensemble=True)
-    X_train, X_test, y_train, y_test = classifier.split_data(X, y)
 
+    # Split into train/val/test
+    X_train, X_val, X_test, y_train, y_val, y_test = classifier.split_data(X, y)
+
+    # STEP 1: Train base models
+    print("\n" + "=" * 80)
+    print("STEP 1: BASE MODEL TRAINING")
+    print("=" * 80)
     if parallel:
         classifier.train_all_models_parallel(X_train, y_train, X_test, y_test)
     else:
         classifier.train_all_models(X_train, y_train, X_test, y_test)
+
+    # STEP 2: Threshold optimization (on base models)
+    if optimize_thresholds:
+        print("\n" + "=" * 80)
+        print("STEP 2: THRESHOLD OPTIMIZATION (BASE MODELS)")
+        print("=" * 80)
+        classifier.optimize_all_thresholds(X_val, y_val, metric='f1')
+
+        # Evaluate base models with their optimal thresholds
+        print("\n📊 Evaluating base models with optimal thresholds...")
+        base_threshold_results = {}
+        for model_name, model in classifier.models.items():
+            if model_name in classifier.optimal_thresholds:
+                result = classifier.evaluate_with_optimal_threshold(
+                    model_name, model, X_test, y_test
+                )
+                base_threshold_results[model_name] = result
+                print(f"  {model_name:<25} F1: {result['f1']:.4f} (threshold: {result['threshold']:.4f})")
+
+        # Store base threshold metrics (for comparison)
+        for name, result in base_threshold_results.items():
+            if name in classifier.results:
+                classifier.results[name]['base_test_f1_optimized'] = result['f1']
+                classifier.results[name]['base_optimal_threshold'] = result['threshold']
+
+    # STEP 3: Hyperparameter tuning (optional, after threshold optimization)
+    if tune_hyperparameters and OPTUNA_AVAILABLE:
+        print("\n" + "=" * 80)
+        print("STEP 3: HYPERPARAMETER TUNING")
+        print("=" * 80)
+        classifier.tune_all_models(X_train, y_train, X_val, y_val, n_trials=n_trials)
+
+        # Replace base models with tuned models
+        for name, tuned_model in classifier.tuned_models.items():
+            classifier.models[name] = tuned_model
+            print(f"  ✅ Replaced {name} with tuned version")
+
+        # Re-evaluate tuned models (default 0.5 threshold)
+        print("\n📊 Re-evaluating tuned models (threshold=0.5)...")
+        if parallel:
+            evaluations = Parallel(n_jobs=classifier.n_jobs, verbose=5)(
+                delayed(classifier._evaluate_single_model)(
+                    name, model, X_train, y_train, X_test, y_test
+                )
+                for name, model in classifier.tuned_models.items()
+            )
+            for result in evaluations:
+                name = result['model_name']
+                classifier.results[name] = result
+    elif tune_hyperparameters and not OPTUNA_AVAILABLE:
+        print("\n⚠️ Hyperparameter tuning requested but Optuna not available.")
+
+    # OPTIONAL: Re-run threshold optimization for tuned models so final models
+    # also have optimal thresholds consistent with the new parameters.
+    if optimize_thresholds and tune_hyperparameters and OPTUNA_AVAILABLE:
+        print("\n" + "=" * 80)
+        print("STEP 4: THRESHOLD OPTIMIZATION (TUNED MODELS)")
+        print("=" * 80)
+        classifier.optimize_all_thresholds(X_val, y_val, metric='f1')
+
+        print("\n📊 Evaluating tuned models with optimal thresholds...")
+        tuned_threshold_results = {}
+        for model_name, model in classifier.models.items():
+            if model_name in classifier.optimal_thresholds:
+                result = classifier.evaluate_with_optimal_threshold(
+                    model_name, model, X_test, y_test
+                )
+                tuned_threshold_results[model_name] = result
+                print(f"  {model_name:<25} F1: {result['f1']:.4f} (threshold: {result['threshold']:.4f})")
+
+        for name, result in tuned_threshold_results.items():
+            if name in classifier.results:
+                classifier.results[name]['test_f1_optimized'] = result['f1']
+                classifier.results[name]['optimal_threshold'] = result['threshold']
 
     classifier.save_models()
     classifier.generate_report()

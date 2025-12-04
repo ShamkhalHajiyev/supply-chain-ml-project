@@ -67,37 +67,34 @@ def run_feature_engineering(df=None):
     return X, y, df
 
 
-def run_classification_training(X=None, y=None, parallel: bool = True):
-    """Step 4: Train classification models with ensemble and parallel computing."""
+def run_classification_training(X=None, y=None, parallel: bool = True,
+                                tune_hyperparameters: bool = True,
+                                optimize_thresholds: bool = True):
+    """Step 4: Train classification models with ensemble, hyperparameter tuning, and threshold optimization."""
     print_header("STEP 4: CLASSIFICATION MODEL TRAINING")
 
-    from src.models.classifier import SupplyChainClassifier
-    from src.features.build_features import build_features_pipeline
-    from src.data.preprocess import load_and_preprocess
+    from src.models.classifier import run_training_pipeline
 
     if X is None or y is None:
+        from src.data.preprocess import load_and_preprocess
+        from src.features.build_features import build_features_pipeline
         df = load_and_preprocess()
         X, y = build_features_pipeline(df)
 
-    # Use all CPU cores for parallel training
-    classifier = SupplyChainClassifier(random_state=42, n_jobs=-1)
-    classifier.initialize_models(include_ensemble=True)
-
-    X_train, X_test, y_train, y_test = classifier.split_data(X, y, test_size=0.2)
-
-    # Use parallel training for faster execution
-    if parallel:
-        print("\n🚀 Using PARALLEL training (all CPU cores)...")
-        classifier.train_all_models_parallel(X_train, y_train, X_test, y_test)
-    else:
-        classifier.train_all_models(X_train, y_train, X_test, y_test)
+    # Run complete pipeline with tuning and threshold optimization
+    classifier = run_training_pipeline(
+        parallel=parallel,
+        tune_hyperparameters=tune_hyperparameters,
+        optimize_thresholds=optimize_thresholds,
+        n_trials=30
+    )
 
     classifier.get_feature_importance(X.columns.tolist(), top_n=15)
-    classifier.save_models()
-    classifier.generate_report()
 
     print(f"\n✅ Classification training complete!")
     print(f"   Best model: {classifier.best_model_name}")
+    if optimize_thresholds and classifier.optimal_thresholds:
+        print(f"   Optimal threshold: {classifier.optimal_thresholds.get(classifier.best_model_name, 0.5):.4f}")
     return classifier
 
 
@@ -184,8 +181,20 @@ def run_evaluation():
 
 
 def run_full_pipeline():
-    """Run the complete pipeline."""
+    """
+    Run the complete pipeline with all optimizations enabled.
+
+    This includes:
+    - Parallel training (all CPU cores)
+    - Hyperparameter tuning with Optuna
+    - Threshold optimization for classification
+    """
     print_header("SUPPLY CHAIN ML - FULL PIPELINE")
+    print("\n🔧 Optimization settings:")
+    print("   ✅ Parallel training: ENABLED")
+    print("   ✅ Hyperparameter tuning: ENABLED")
+    print("   ✅ Threshold optimization: ENABLED")
+    print()
 
     start_time = datetime.now()
 
@@ -194,8 +203,13 @@ def run_full_pipeline():
     df_clean = run_preprocessing(df)
     X, y, _ = run_feature_engineering(df_clean)
 
-    # Step 4-5: Training (with parallel execution)
-    classifier = run_classification_training(X, y, parallel=True)
+    # Step 4-5: Training (with ALL optimizations enabled)
+    classifier = run_classification_training(
+        X, y,
+        parallel=True,              # Use all CPU cores
+        tune_hyperparameters=True,  # Optuna hyperparameter tuning
+        optimize_thresholds=True    # Threshold optimization
+    )
     forecaster = run_forecasting_training(df_clean)
 
     # Summary
@@ -222,7 +236,7 @@ Examples:
         """
     )
 
-    parser.add_argument('--all', action='store_true', help='Run complete pipeline')
+    parser.add_argument('--all', action='store_true', help='Run complete pipeline with all optimizations (tuning + threshold optimization)')
     parser.add_argument('--data', action='store_true', help='Load raw data')
     parser.add_argument('--preprocess', action='store_true', help='Preprocess data')
     parser.add_argument('--features', action='store_true', help='Build features')
@@ -231,6 +245,8 @@ Examples:
     parser.add_argument('--train-lstm', action='store_true', help='Train LSTM model')
     parser.add_argument('--evaluate', action='store_true', help='Evaluate models')
     parser.add_argument('--no-parallel', action='store_true', help='Disable parallel training (use sequential)')
+    parser.add_argument('--no-tuning', action='store_true', help='Skip hyperparameter tuning')
+    parser.add_argument('--no-threshold-opt', action='store_true', help='Skip threshold optimization')
 
     args = parser.parse_args()
 
@@ -249,7 +265,11 @@ Examples:
             if args.features:
                 run_feature_engineering()
             if args.train_classification:
-                run_classification_training(parallel=not args.no_parallel)
+                run_classification_training(
+                    parallel=not args.no_parallel,
+                    tune_hyperparameters=not args.no_tuning,
+                    optimize_thresholds=not args.no_threshold_opt
+                )
             if args.train_forecasting:
                 run_forecasting_training()
             if args.train_lstm:

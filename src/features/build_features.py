@@ -317,11 +317,12 @@ class FeatureEngineer:
 
         X = df[feature_cols].copy()
 
-        # Use late_delivery_risk directly if available, otherwise create from delivery_status
+        # Use late_delivery_risk directly if available, otherwise use late_delivery
+        # Always convert to int for consistency and robust model training
         if 'late_delivery_risk' in df.columns:
             y = df['late_delivery_risk'].astype(int)
         elif 'late_delivery' in df.columns:
-            y = df['late_delivery']
+            y = df['late_delivery'].astype(int)
         else:
             y = None
 
