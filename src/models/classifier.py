@@ -367,14 +367,81 @@ class SupplyChainClassifier:
             self._print_model_result(result)
 
     def select_best_model(self):
-        """Select best model based on test F1."""
-        best_f1, best_name = 0, None
+        """
+        Select best model considering both performance and overfitting.
+        
+        Priority:
+        1. Models with GOOD FIT status (no overfitting)
+        2. Among good fit models, highest test F1 score (use optimized F1 if available)
+        3. If no good fit models, select highest F1 but warn about overfitting
+        4. Secondary criterion: smaller accuracy gap (better generalization)
+        """
+        good_fit_models = []
+        overfitting_models = []
+        underfitting_models = []
+        
+        # Categorize models by fit status
         for name, res in self.results.items():
-            if res['test_f1'] > best_f1:
-                best_f1, best_name = res['test_f1'], name
+            fit_status = res.get('fit_status', '')
+            # Use optimized F1 if available, otherwise use regular test_f1
+            f1_score = res.get('test_f1_optimized', res.get('test_f1', 0))
+            
+            if 'GOOD FIT' in fit_status:
+                good_fit_models.append((name, res, f1_score))
+            elif 'OVERFITTING' in fit_status:
+                overfitting_models.append((name, res, f1_score))
+            elif 'UNDERFITTING' in fit_status:
+                underfitting_models.append((name, res, f1_score))
+        
+        best_name = None
+        best_f1 = 0
+        selection_reason = ""
+        
+        # Priority 1: Select from good fit models
+        if good_fit_models:
+            # Sort by F1 score (descending), then by accuracy gap (ascending)
+            good_fit_models.sort(
+                key=lambda x: (x[2], -x[1]['accuracy_gap']),
+                reverse=True
+            )
+            best_name, best_result, best_f1 = good_fit_models[0]
+            selection_reason = f"Best among GOOD FIT models (F1: {best_f1:.4f}, Gap: {best_result['accuracy_gap']:.4f})"
+        # Priority 2: If no good fit, select from overfitting models (but warn)
+        elif overfitting_models:
+            overfitting_models.sort(
+                key=lambda x: (x[2], -x[1]['accuracy_gap']),
+                reverse=True
+            )
+            best_name, best_result, best_f1 = overfitting_models[0]
+            selection_reason = f"⚠️ WARNING: Selected overfitting model (F1: {best_f1:.4f}, Gap: {best_result['accuracy_gap']:.4f})"
+        # Priority 3: Last resort - any model
+        else:
+            # Sort all models by F1 score
+            all_models = [(name, res, res.get('test_f1_optimized', res.get('test_f1', 0))) 
+                         for name, res in self.results.items()]
+            all_models.sort(key=lambda x: x[2], reverse=True)
+            if all_models:
+                best_name, best_result, best_f1 = all_models[0]
+                selection_reason = f"Selected highest F1 model (F1: {best_f1:.4f})"
+        
+        if best_name is None:
+            raise ValueError("No models available for selection")
+        
         self.best_model_name = best_name
         self.best_model = self.models[best_name]
-        print(f"\n{'=' * 60}\n🏆 BEST MODEL: {best_name}\n   Test F1: {best_f1:.4f}\n{'=' * 60}")
+        
+        # Print selection details
+        best_result = self.results[best_name]
+        optimized_f1 = best_result.get('test_f1_optimized')
+        f1_display = optimized_f1 if optimized_f1 else best_f1
+        
+        print(f"\n{'=' * 60}\n🏆 BEST MODEL: {best_name}\n{'=' * 60}")
+        print(f"   Test F1: {f1_display:.4f}" + (" (optimized)" if optimized_f1 else ""))
+        print(f"   Test Accuracy: {best_result['test_accuracy']:.4f}")
+        print(f"   Accuracy Gap: {best_result['accuracy_gap']:.4f}")
+        print(f"   Fit Status: {best_result['fit_status']}")
+        print(f"   Selection: {selection_reason}")
+        print(f"{'=' * 60}")
 
     def print_overfitting_summary(self):
         """Print overfitting analysis summary."""
@@ -1359,7 +1426,21 @@ class SupplyChainClassifier:
 
         report.append(f"### Best Model for Production")
         report.append(f"- **Recommended:** {self.best_model_name}")
-        report.append(f"- **Reason:** Highest test F1 score ({best_result.get('test_f1', 0):.4f})")
+
+        # Explain selection criteria
+        fit_status = best_result.get('fit_status', '')
+        if 'GOOD FIT' in fit_status:
+            report.append(f"- **Reason:** Best model among GOOD FIT models (no overfitting)")
+            report.append(f"  - Test F1 Score: {best_result.get('test_f1', 0):.4f}")
+            report.append(f"  - Accuracy Gap: {best_result.get('accuracy_gap', 0):.4f} (good generalization)")
+        elif 'OVERFITTING' in fit_status:
+            report.append(f"- **⚠️ WARNING:** Selected model shows overfitting")
+            report.append(f"  - Test F1 Score: {best_result.get('test_f1', 0):.4f}")
+            report.append(f"  - Accuracy Gap: {best_result.get('accuracy_gap', 0):.4f} (high gap indicates overfitting)")
+            report.append(f"  - **Recommendation:** Consider using a model with GOOD FIT status if available")
+        else:
+            report.append(f"- **Reason:** Selected based on test F1 score ({best_result.get('test_f1', 0):.4f})")
+
         if self.optimal_thresholds and self.best_model_name in self.optimal_thresholds:
             report.append(f"- **Use threshold:** {self.optimal_thresholds[self.best_model_name]:.4f} (instead of default 0.5)")
         report.append("")
@@ -1561,6 +1642,14 @@ def run_training_pipeline(parallel: bool = True, tune_hyperparameters: bool = Tr
             if name in classifier.results:
                 classifier.results[name]['test_f1_optimized'] = result['f1']
                 classifier.results[name]['optimal_threshold'] = result['threshold']
+                # Update main test_f1 with optimized version for best model selection
+                classifier.results[name]['test_f1'] = result['f1']
+
+    # Re-select best model after all optimizations (considering overfitting)
+    print("\n" + "=" * 80)
+    print("FINAL MODEL SELECTION (considering overfitting)")
+    print("=" * 80)
+    classifier.select_best_model()
 
     classifier.save_models()
     classifier.generate_report()
