@@ -2,6 +2,8 @@
 Feature Engineering Module
 Transforms preprocessed data into ML-ready features for late delivery classification.
 
+For advanced features (RFM, zone aggregations, interactions), see build_features_advanced.py
+
 IMPORTANT: This module carefully avoids data leakage by only using features
 available at ORDER TIME (before delivery outcome is known).
 

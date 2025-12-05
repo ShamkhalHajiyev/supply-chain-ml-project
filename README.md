@@ -14,9 +14,11 @@ End-to-end machine learning system for late delivery detection:
 - 🎯 **Enhanced Ensembles** - Stacking with 6 base learners (F1=0.89)
 - 🔧 **Optuna Optimization** - Bayesian hyperparameter tuning (TPE algorithm)
 - 🎨 **Enhanced Features** - RFM, Zone-based aggregations, Interactions (+51% features)
+- 👥 **Customer Clustering** - KMeans/DBSCAN segmentation analysis
 - 📊 **Comprehensive Evaluation** - ROC, PR curves, Calibration, Learning curves
 - 🔍 **SHAP Explanations** - Interpretable model insights
-- 📓 **Detailed Notebooks** - Step-by-step analysis
+- 📓 **Detailed Notebooks** - Step-by-step analysis with non-technical metric explanations
+- 🎨 **Dark-Mode Visualizations** - High-contrast, presentation-ready plots
 - 🚀 **Parallel Training** - Fast model training using all CPU cores
 - ⚠️ **Data Leakage Prevention** - Proper feature selection (realistic 70-85% accuracy)
 
@@ -51,40 +53,104 @@ python main.py --train-classification   # Classification models
 
 ```
 supply-chain-ml-project/
-├── main.py                         # CLI entry point
-├── pyproject.toml                  # Dependencies
+├── main.py                              # CLI entry point
+├── pyproject.toml                       # Dependencies
 ├── data/
-│   ├── raw/                        # Raw data from Kaggle
-│   ├── interim/                    # Intermediate data
-│   └── processed/                  # ML-ready features
-├── models/                         # Saved models (.pkl, .pt)
+│   ├── raw/                             # Raw data from Kaggle
+│   ├── interim/                         # Intermediate data
+│   └── processed/                       # ML-ready features
+├── models/                              # Saved models (.pkl)
 ├── notebooks/
-│   ├── 01_exploratory_analysis.ipynb
-│   ├── 02_data_preprocessing.ipynb
-│   ├── 03_feature_engineering.ipynb
-│   └── 04_model_evaluation.ipynb
+│   ├── 01_data_understanding.ipynb      # Data exploration
+│   ├── 02_data_preprocessing.ipynb      # Data cleaning
+│   ├── 03_feature_engineering.ipynb     # Feature creation
+│   ├── 04_model_training.ipynb          # Model training
+│   ├── 05_business_impact.ipynb         # Business analysis
+│   └── presentation.ipynb               # 10-min presentation (dark mode)
 ├── src/
 │   ├── data/
-│   │   ├── data_manager.py         # Kaggle API, caching
-│   │   └── preprocess.py           # Data cleaning
+│   │   ├── data_manager.py              # Data loading utilities
+│   │   └── preprocess.py                # Data preprocessing
 │   ├── features/
-│   │   └── build_features.py       # 60+ features
-│   └── models/
-│       ├── classifier.py           # Classification models
-│       └── classifier_optimized.py # Optimized classifiers with Optuna
-└── reports/
-    ├── figures/
-    └── logs/
+│   │   ├── build_features.py            # Feature engineering (uses advanced)
+│   │   ├── build_features_advanced.py   # ⭐ Advanced feature engineering
+│   │   └── feature_selector.py          # Feature selection
+│   ├── models/
+│   │   ├── classifier.py                # Classifiers (uses advanced)
+│   │   └── classifier_advanced.py       # ⭐ Advanced classifier with Optuna
+│   ├── clustering/                      # ⭐ NEW: Customer clustering
+│   │   ├── __init__.py
+│   │   └── customer_clustering.py       # KMeans, DBSCAN
+│   ├── visualization/                   # ⭐ NEW: Dark-mode plotting
+│   │   ├── __init__.py
+│   │   ├── dark_theme.py                # Color palette & themes
+│   │   └── cluster_viz.py               # Cluster visualizations
+│   └── evaluation/
+│       └── model_evaluator.py           # Model evaluation
+└── reports/                             # Generated reports
 ```
 
 ## Notebooks Guide
 
 | # | Notebook | Key Topics |
 |---|----------|------------|
-| 01 | Exploratory Analysis | Dataset structure, distributions, correlations |
+| 01 | Data Understanding | Dataset structure, distributions, correlations |
 | 02 | Data Preprocessing | Missing values, outliers, data cleaning |
 | 03 | Feature Engineering | 60+ features across 5 categories |
-| 04 | Model Evaluation | Classification models, ensembles, SHAP, business impact |
+| 04 | Model Training | Classification models, ensembles, Optuna tuning |
+| 05 | Business Impact | SHAP explanations, ROI analysis |
+| 🎤 | **Presentation** | 10-min presentation with dark-mode visuals, clustering |
+
+## 🎨 Dark-Mode Visualizations
+
+All notebooks now use a **high-contrast, dark-mode friendly color palette** optimized for presentations:
+
+```python
+from src.visualization import apply_dark_theme, DARK_COLORS
+apply_dark_theme()  # Apply to all Plotly figures
+```
+
+**Color Palette:**
+- Categorical: Cyan, Magenta, Lime, Amber, Violet, Teal, Coral, Gold
+- Status: Late (Magenta), On-time (Lime), Risk levels (Coral/Amber/Teal)
+- Background: GitHub-dark inspired (#0D1117, #161B22, #21262D)
+
+## 👥 Customer Clustering
+
+New module for customer segmentation analysis:
+
+```python
+from src.clustering import run_kmeans_clustering, run_dbscan_clustering
+
+# KMeans clustering
+labels, model, metrics = run_kmeans_clustering(data, n_clusters=4)
+
+# DBSCAN (density-based, finds outliers)
+labels, model, metrics = run_dbscan_clustering(data, eps=0.5, min_samples=5)
+
+# Full analysis pipeline
+from src.clustering import CustomerClusterAnalyzer
+analyzer = CustomerClusterAnalyzer(method='kmeans')
+analyzer.fit(customer_data, feature_columns=['sales', 'orders', 'recency'])
+descriptions = analyzer.get_cluster_descriptions(customer_data)
+```
+
+**Non-technical interpretation:**
+- Clusters represent groups of customers with similar purchasing behavior
+- High-value, Budget, and Standard customer segments automatically identified
+- Useful for targeted interventions and shipping strategy optimization
+
+## 📖 Non-Technical Metric Explanations
+
+All model evaluations include plain-language explanations:
+
+| Metric | Plain English |
+|--------|---------------|
+| **Accuracy** | How often the model is correct overall |
+| **Precision** | When predicting "late", how often is it actually late? |
+| **Recall** | Of all actual late deliveries, how many did we catch? |
+| **F1 Score** | Balanced combination of precision and recall |
+| **ROC-AUC** | How well does the model distinguish late from on-time? |
 
 ## Models
 
@@ -108,6 +174,17 @@ supply-chain-ml-project/
 
 **NEW: Optuna-tuned variants available** for XGBoost, CatBoost, LightGBM (+2-3% F1)
 
+## 🔧 Advanced Modules (Unified)
+
+The `/src` modules have been consolidated into advanced versions that combine all functionality:
+
+| Module | Description | Usage |
+|--------|-------------|-------|
+| `build_features_advanced.py` | Unified feature engineering (base + RFM + zones + interactions) | `from src.features.build_features_advanced import build_features_pipeline` |
+| `classifier_advanced.py` | Unified classifier (all models + Optuna + thresholds) | `from src.models.classifier_advanced import AdvancedSupplyChainClassifier` |
+
+`build_features.py` and `classifier.py` serve as convenience wrappers that re-export from the advanced modules.
+
 ## Technical Stack
 
 | Category | Technologies |
@@ -116,9 +193,10 @@ supply-chain-ml-project/
 | Package Manager | uv |
 | Data | Pandas, NumPy, Polars |
 | ML | Scikit-learn, XGBoost, **CatBoost**, **LightGBM** |
+| Clustering | **KMeans**, **DBSCAN** (customer segmentation) |
 | Optimization | **Optuna** (Bayesian hyperparameter tuning) |
 | Imbalanced Data | **imbalanced-learn** (SMOTE) |
-| Visualization | Matplotlib, Seaborn, Plotly |
+| Visualization | Matplotlib, Seaborn, **Plotly** (dark-mode) |
 | Explainability | SHAP |
 | Storage | Parquet |
 | Evaluation | **Category Encoders**, **Scipy** (statistical tests) |
@@ -185,4 +263,19 @@ This is why our models achieve ~70% accuracy instead of 100%. The 100% accuracy 
 
 ---
 
-**Version:** 2.0 | **Python:** 3.10+ | **License:** MIT
+## Changelog (v3.0)
+
+### New Features
+- 🎨 **Dark-mode visualizations** - High-contrast color palette for all plots
+- 👥 **Customer clustering module** - KMeans & DBSCAN with visualization tools
+- 📖 **Non-technical metric explanations** - Plain-language descriptions in notebooks
+- 🔧 **Unified advanced modules** - Consolidated feature engineering and classifiers
+
+### Improvements
+- Presentation notebook with clustering analysis
+- Train/test comparison visualizations
+- Enhanced model evaluation with metric interpretations
+
+---
+
+**Version:** 3.0 | **Python:** 3.10+ | **License:** MIT

@@ -80,11 +80,12 @@ def run_classification_training(X=None, y=None, parallel: bool = True,
         X, y = build_features_pipeline(df)
 
     # Run complete pipeline with tuning and threshold optimization
+    # Reduced n_trials from 30 to 10 for faster training
     classifier = run_training_pipeline(
         parallel=parallel,
         tune_hyperparameters=tune_hyperparameters,
         optimize_thresholds=optimize_thresholds,
-        n_trials=30
+        n_trials=10
     )
 
     classifier.get_feature_importance(X.columns.tolist(), top_n=15)
